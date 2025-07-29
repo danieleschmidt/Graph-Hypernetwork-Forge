@@ -1,0 +1,38 @@
+# Base configuration for Graph Hypernetwork Forge
+
+# Model configuration
+model:
+  name: "HyperGNN"
+  text_encoder: "sentence-transformers/all-MiniLM-L6-v2"
+  gnn_backbone: "GAT"
+  hidden_dim: 256
+  num_layers: 3
+
+# Data configuration
+data:
+  name: "TextualKnowledgeGraph"
+  path: "data/sample"
+  batch_size: 32
+  num_workers: 4
+
+# Training configuration
+training:
+  epochs: 100
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  
+# Logging configuration
+logging:
+  wandb:
+    project: "graph-hypernetwork-forge"
+    entity: null
+  log_interval: 10
+  save_interval: 10
+
+# Hardware configuration
+device: "auto"  # auto, cpu, cuda
+mixed_precision: true
+
+# Reproducibility
+seed: 42
