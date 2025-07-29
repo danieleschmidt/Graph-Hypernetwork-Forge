@@ -1,0 +1,120 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing and coverage
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+.hypothesis/
+cover/
+
+# Documentation build
+docs/_build/
+.sphinx/
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Model artifacts and data (unless needed)
+*.model
+*.pkl
+*.pth
+*.ckpt
+data/raw/
+data/processed/
+models/checkpoints/
+logs/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Development tools
+.pre-commit-config.yaml
+.flake8
+.mypy_cache/
+.ruff_cache/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Security
+.env.local
+.env.production
+*.key
+*.pem
+*.crt
+
+# Large files that shouldn't be in image
+*.zip
+*.tar.gz
+*.tar.bz2
+*.7z
+
+# Documentation that's not needed in container
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md

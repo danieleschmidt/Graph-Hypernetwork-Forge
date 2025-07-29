@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # Development environment
+  dev:
+    build:
+      context: .
+      target: development
+    volumes:
+      - .:/home/app:cached
+      - pip-cache:/home/app/.cache/pip
+    environment:
+      - PYTHONPATH=/home/app
+      - WANDB_MODE=offline
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+    networks:
+      - hypergnn-net
+
+  # Testing environment  
+  test:
+    build:
+      context: .
+      target: development
+    volumes:
+      - .:/home/app:cached
+      - test-cache:/home/app/.pytest_cache
+    environment:
+      - PYTHONPATH=/home/app
+      - COVERAGE_FILE=/home/app/.coverage
+    command: pytest tests/ -v --cov=graph_hypernetwork_forge --cov-report=html --cov-report=term-missing
+    networks:
+      - hypergnn-net
+
+  # Production environment
+  prod:
+    build:
+      context: .
+      target: production
+    environment:
+      - PYTHONPATH=/home/app
+    restart: unless-stopped
+    networks:
+      - hypergnn-net
+
+  # Training environment with Jupyter
+  train:
+    build:
+      context: .
+      target: training
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./data:/home/app/data:cached
+      - ./models:/home/app/models:cached
+      - ./notebooks:/home/app/notebooks:cached
+      - training-logs:/home/app/logs
+    environment:
+      - PYTHONPATH=/home/app
+      - JUPYTER_ENABLE_LAB=yes
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+    networks:
+      - hypergnn-net
+
+  # GPU training environment (requires nvidia-docker)
+  train-gpu:
+    build:
+      context: .
+      target: training
+    ports:
+      - "8889:8888"  # Different port to avoid conflicts
+    volumes:
+      - ./data:/home/app/data:cached
+      - ./models:/home/app/models:cached
+      - ./notebooks:/home/app/notebooks:cached
+      - training-logs-gpu:/home/app/logs
+    environment:
+      - PYTHONPATH=/home/app
+      - JUPYTER_ENABLE_LAB=yes
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - CUDA_VISIBLE_DEVICES=0
+    runtime: nvidia
+    networks:
+      - hypergnn-net
+
+  # Model serving environment
+  serve:
+    build:
+      context: .
+      target: production
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/home/app/models:ro
+    environment:
+      - MODEL_PATH=/home/app/models
+      - PYTHONPATH=/home/app
+    command: python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    networks:
+      - hypergnn-net
+
+  # Database for experiment tracking (optional)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=hypergnn
+      - POSTGRES_USER=hypergnn
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-hypergnn_dev}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - hypergnn-net
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - hypergnn-net
+
+volumes:
+  pip-cache:
+  test-cache:
+  training-logs:
+  training-logs-gpu:
+  postgres-data:
+  redis-data:
+
+networks:
+  hypergnn-net:
+    driver: bridge
