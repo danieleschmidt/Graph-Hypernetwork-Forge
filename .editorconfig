@@ -1,3 +1,6 @@
+# EditorConfig helps maintain consistent coding styles
+# More info: https://editorconfig.org/
+
 root = true
 
 [*]
@@ -8,11 +11,31 @@ trim_trailing_whitespace = true
 indent_style = space
 indent_size = 4
 
-[*.{yml,yaml}]
+[*.{py,pyi}]
+indent_size = 4
+max_line_length = 88
+
+[*.{js,ts,jsx,tsx,vue}]
 indent_size = 2
 
-[*.{json,js,ts}]
+[*.{json,yml,yaml}]
 indent_size = 2
 
-[*.md]
+[*.{md,rst}]
 trim_trailing_whitespace = false
+max_line_length = 100
+
+[*.{sh,bash}]
+indent_size = 2
+
+[Makefile]
+indent_style = tab
+
+[*.{toml,cfg,ini}]
+indent_size = 4
+
+[Dockerfile*]
+indent_size = 2
+
+[*.{html,xml,svg}]
+indent_size = 2
