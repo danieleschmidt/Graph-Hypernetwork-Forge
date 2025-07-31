@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report Security Vulnerability (Private)
+    url: https://github.com/yourusername/graph-hypernetwork-forge/security/advisories/new
+    about: Report sensitive security vulnerabilities privately through GitHub Security Advisories
+  - name: 💬 Discussion Forum
+    url: https://github.com/yourusername/graph-hypernetwork-forge/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📖 Documentation
+    url: https://github.com/yourusername/graph-hypernetwork-forge/blob/main/README.md
+    about: Check the documentation for usage examples and API reference

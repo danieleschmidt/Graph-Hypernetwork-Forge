@@ -1,0 +1,158 @@
+# OpenTelemetry Collector configuration for Graph Hypernetwork Forge
+# This configuration enables comprehensive observability with traces, metrics, and logs
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus metrics scraping
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'graph-hypernetwork-forge'
+          static_configs:
+            - targets: ['localhost:8080']
+          scrape_interval: 30s
+
+        - job_name: 'pytorch-model'
+          static_configs:
+            - targets: ['localhost:8081']
+          scrape_interval: 15s
+
+  # Host metrics for system monitoring
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      disk:
+        metrics:
+          system.disk.io:
+            enabled: true
+      filesystem:
+        metrics:
+          system.filesystem.utilization:
+            enabled: true
+      network:
+        metrics:
+          system.network.io:
+            enabled: true
+
+  # Log file monitoring
+  filelog:
+    include:
+      - /var/log/graph-hypernetwork-forge/*.log
+      - /app/logs/*.log
+    operators:
+      - type: json_parser
+        timestamp:
+          parse_from: attributes.timestamp
+          layout: '%Y-%m-%d %H:%M:%S'
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+  memory_limiter:
+    limit_mib: 512
+
+  # Resource detection for better attribution
+  resourcedetection:
+    detectors: [env, system, docker]
+    timeout: 5s
+
+  # Attributes processing for ML-specific metadata
+  attributes:
+    actions:
+      - key: service.name
+        value: graph-hypernetwork-forge
+        action: upsert
+      - key: service.version
+        from_attribute: app.version
+        action: upsert
+      - key: deployment.environment
+        from_attribute: env
+        action: upsert
+
+  # Tail sampling for distributed tracing
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 10000
+    policies:
+      - name: errors
+        type: status_code
+        status_code: {status_codes: [ERROR]}
+      - name: high_latency
+        type: latency
+        latency: {threshold_ms: 1000}
+      - name: ml_operations
+        type: string_attribute
+        string_attribute: {key: operation.type, values: [training, inference, evaluation]}
+
+exporters:
+  # Prometheus metrics export
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: ghf
+    const_labels:
+      service: graph-hypernetwork-forge
+
+  # Jaeger for distributed tracing
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  # OTLP for comprehensive observability platforms
+  otlp:
+    endpoint: http://otel-collector:4317
+    tls:
+      insecure: true
+
+  # Logging export
+  logging:
+    loglevel: info
+
+  # File export for development/debugging
+  file:
+    path: /tmp/otel-output.json
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, attributes, tail_sampling, batch]
+      exporters: [jaeger, otlp, logging]
+
+    metrics:
+      receivers: [otlp, prometheus, hostmetrics]
+      processors: [memory_limiter, resourcedetection, attributes, batch]
+      exporters: [prometheus, otlp, logging]
+
+    logs:
+      receivers: [otlp, filelog]
+      processors: [memory_limiter, resourcedetection, attributes, batch]
+      exporters: [otlp, logging, file]
+
+  extensions: [health_check, pprof, zpages]
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  zpages:
+    endpoint: 0.0.0.0:55679

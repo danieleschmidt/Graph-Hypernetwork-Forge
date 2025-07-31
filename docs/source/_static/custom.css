@@ -1,0 +1,197 @@
+/* Custom CSS for Graph Hypernetwork Forge Documentation */
+
+/* Model card styling */
+.model-card {
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 16px;
+    margin: 16px 0;
+    background-color: #f6f8fa;
+}
+
+.model-card h3 {
+    margin-top: 0;
+    color: #0366d6;
+}
+
+/* Code highlighting improvements */
+.highlight {
+    margin: 16px 0;
+}
+
+.highlight pre {
+    padding: 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+/* Admonition styling */
+.admonition {
+    padding: 12px;
+    margin: 16px 0;
+    border-left: 4px solid #e1e4e8;
+    background-color: #f6f8fa;
+}
+
+.admonition.note {
+    border-left-color: #0366d6;
+}
+
+.admonition.warning {
+    border-left-color: #d73a49;
+    background-color: #ffeaea;
+}
+
+.admonition.tip {
+    border-left-color: #28a745;
+    background-color: #eaffea;
+}
+
+/* API documentation improvements */
+.class > dt,
+.function > dt,
+.method > dt {
+    background-color: #f1f8ff;
+    border: 1px solid #c8e1ff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 16px;
+}
+
+.class > dd,
+.function > dd,
+.method > dd {
+    margin-left: 0;
+    padding-left: 16px;
+    border-left: 2px solid #e1e4e8;
+    margin-bottom: 16px;
+}
+
+/* Parameter list styling */
+.field-list {
+    margin: 12px 0;
+}
+
+.field-list > dt {
+    font-weight: bold;
+    margin-right: 8px;
+    min-width: 80px;
+    display: inline-block;
+}
+
+/* Table styling */
+table.docutils {
+    border-collapse: collapse;
+    margin: 16px 0;
+    width: 100%;
+}
+
+table.docutils th,
+table.docutils td {
+    border: 1px solid #e1e4e8;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+table.docutils th {
+    background-color: #f6f8fa;
+    font-weight: bold;
+}
+
+/* Navigation improvements */
+.wy-nav-side {
+    background: #2c3e50;
+}
+
+.wy-side-nav-search {
+    background: #34495e;
+}
+
+.wy-side-nav-search input[type=text] {
+    border-radius: 4px;
+}
+
+/* Content improvements */
+.rst-content .section > h1,
+.rst-content .section > h2,
+.rst-content .section > h3 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+}
+
+.rst-content .section > h1 {
+    border-bottom: 2px solid #e1e4e8;
+    padding-bottom: 8px;
+}
+
+/* Code block title styling */
+.code-block-caption {
+    background-color: #f1f8ff;
+    border: 1px solid #c8e1ff;
+    border-bottom: none;
+    padding: 8px 12px;
+    font-weight: bold;
+    border-radius: 6px 6px 0 0;
+    margin-bottom: 0;
+}
+
+.code-block-caption + .highlight {
+    margin-top: 0;
+}
+
+.code-block-caption + .highlight pre {
+    border-radius: 0 0 6px 6px;
+    margin-top: 0;
+}
+
+/* Responsive improvements */
+@media screen and (max-width: 768px) {
+    .model-card {
+        padding: 12px;
+        margin: 12px 0;
+    }
+    
+    .highlight pre {
+        padding: 12px;
+        font-size: 13px;
+    }
+    
+    table.docutils {
+        font-size: 14px;
+    }
+    
+    table.docutils th,
+    table.docutils td {
+        padding: 6px 8px;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .model-card {
+        background-color: #1c2128;
+        border-color: #30363d;
+    }
+    
+    .admonition {
+        background-color: #1c2128;
+        border-left-color: #30363d;
+    }
+    
+    .class > dt,
+    .function > dt,
+    .method > dt {
+        background-color: #0d1117;
+        border-color: #30363d;
+    }
+    
+    table.docutils th {
+        background-color: #1c2128;
+    }
+    
+    table.docutils th,
+    table.docutils td {
+        border-color: #30363d;
+    }
+}

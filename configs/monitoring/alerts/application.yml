@@ -1,0 +1,104 @@
+# Application alerts for Graph Hypernetwork Forge
+groups:
+  - name: application.rules
+    rules:
+      # High error rate alert
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors per second"
+
+      # Model inference latency alert
+      - alert: HighInferenceLatency
+        expr: histogram_quantile(0.95, rate(model_inference_duration_seconds_bucket[5m])) > 2.0
+        for: 10m
+        labels:
+          severity: warning
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "High model inference latency"
+          description: "95th percentile inference latency is {{ $value }} seconds"
+
+      # Memory usage alert
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / (1024 * 1024 * 1024) > 8
+        for: 15m
+        labels:
+          severity: warning
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}GB"
+
+      # GPU utilization alert (if applicable)
+      - alert: LowGPUUtilization
+        expr: nvidia_gpu_utilization_percentage < 20
+        for: 30m
+        labels:
+          severity: info
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "Low GPU utilization"
+          description: "GPU utilization is {{ $value }}%"
+
+      # Training job failure alert
+      - alert: TrainingJobFailure
+        expr: increase(training_job_failures_total[1h]) > 3
+        for: 0s
+        labels:
+          severity: critical
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "Multiple training job failures"
+          description: "{{ $value }} training jobs have failed in the last hour"
+
+      # Model accuracy degradation
+      - alert: ModelAccuracyDegradation
+        expr: model_accuracy_score < 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "Model accuracy below threshold"
+          description: "Model accuracy is {{ $value }}, below 0.85 threshold"
+
+  - name: infrastructure.rules
+    rules:
+      # Disk space alert
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_free_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is {{ $value }}% free"
+
+      # CPU usage alert
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%"
+
+      # Service down alert
+      - alert: ServiceDown
+        expr: up{job="graph-hypernetwork-forge"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: graph-hypernetwork-forge
+        annotations:
+          summary: "Service is down"
+          description: "Graph Hypernetwork Forge service is not responding"

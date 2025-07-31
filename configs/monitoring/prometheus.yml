@@ -1,0 +1,72 @@
+# Prometheus configuration for Graph Hypernetwork Forge
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: 'graph-hypernetwork-forge'
+    environment: 'development'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts/*.yml"
+
+# Scrape configuration
+scrape_configs:
+  # Application metrics
+  - job_name: 'graph-hypernetwork-forge'
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: /metrics
+    scrape_interval: 5s
+    scrape_timeout: 5s
+
+  # PyTorch model metrics
+  - job_name: 'pytorch-metrics'
+    static_configs:
+      - targets: ['localhost:8001']
+    metrics_path: /model/metrics
+    scrape_interval: 30s
+
+  # System metrics (node_exporter)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+
+  # Python application metrics (using prometheus_client)
+  - job_name: 'python-app'
+    static_configs:
+      - targets: ['localhost:8080']
+    metrics_path: /metrics
+
+  # GPU metrics (if available)
+  - job_name: 'gpu-metrics'
+    static_configs:
+      - targets: ['localhost:9445']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+# Recording rules for performance optimization
+recording_rules:
+  - name: graph_hypernetwork_forge.rules
+    rules:
+      # Model performance metrics
+      - record: ghf:model_inference_duration_seconds:rate5m
+        expr: rate(model_inference_duration_seconds_total[5m])
+      
+      - record: ghf:model_training_duration_seconds:rate5m
+        expr: rate(model_training_duration_seconds_total[5m])
+      
+      # Memory usage trends
+      - record: ghf:memory_usage_bytes:avg_over_time
+        expr: avg_over_time(process_resident_memory_bytes[10m])
+      
+      # GPU utilization (if available)
+      - record: ghf:gpu_utilization:avg_over_time
+        expr: avg_over_time(nvidia_gpu_utilization_percentage[5m])
