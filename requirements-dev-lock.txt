@@ -1,0 +1,30 @@
+# Locked development dependencies for Graph Hypernetwork Forge
+# Generated from pyproject.toml [project.optional-dependencies.dev]
+# Install with: pip install -r requirements-dev-lock.txt
+
+# Core development dependencies
+pytest==7.4.4
+pytest-cov==4.1.0
+pytest-benchmark==4.0.0
+pytest-mock==3.12.0
+
+# Code formatting and linting
+black==23.12.1
+isort==5.13.2
+flake8==6.1.0
+mypy==1.8.0
+
+# Pre-commit and security
+pre-commit==3.6.0
+bandit[toml]==1.7.5
+safety==2.3.5
+
+# Performance profiling
+memory-profiler==0.61.0
+
+# Additional development tools
+coverage==7.4.0
+tox==4.11.4
+pytest-xdist==3.5.0  # For parallel test execution
+pytest-timeout==2.3.1  # For test timeouts
+pytest-randomly==3.15.0  # For random test ordering
