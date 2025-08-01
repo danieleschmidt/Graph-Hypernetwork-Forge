@@ -1,0 +1,81 @@
+# Health check configuration for Graph Hypernetwork Forge
+# Defines health endpoints and monitoring probes
+
+health_checks:
+  api:
+    endpoint: "/health"
+    method: "GET"
+    timeout: 5
+    interval: 30
+    retries: 3
+    expected_status: 200
+    
+  model_ready:
+    endpoint: "/health/model"
+    method: "GET"
+    timeout: 10
+    interval: 60
+    retries: 2
+    expected_status: 200
+    
+  database:
+    endpoint: "/health/db"
+    method: "GET"
+    timeout: 5
+    interval: 30
+    retries: 3
+    expected_status: 200
+
+  dependencies:
+    endpoint: "/health/dependencies"
+    method: "GET"
+    timeout: 15
+    interval: 120
+    retries: 2
+    expected_status: 200
+
+# Kubernetes-style probes
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+    
+  readiness:
+    httpGet:
+      path: /health/ready
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+    
+  startup:
+    httpGet:
+      path: /health/startup
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Custom health checks
+custom_checks:
+  gpu_availability:
+    command: "python -c 'import torch; print(torch.cuda.is_available())'"
+    expected_output: "True"
+    timeout: 10
+    
+  model_inference:
+    command: "python -c 'from graph_hypernetwork_forge import HyperGNN; m=HyperGNN(); print(\"OK\")'"
+    expected_output: "OK"
+    timeout: 30
+    
+  memory_usage:
+    command: "python -c 'import psutil; print(psutil.virtual_memory().percent < 90)'"
+    expected_output: "True"
+    timeout: 5
