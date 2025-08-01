@@ -1,0 +1,94 @@
+{
+  "branches": [
+    "main",
+    {
+      "name": "develop",
+      "prerelease": "beta"
+    },
+    {
+      "name": "alpha",
+      "prerelease": "alpha"
+    }
+  ],
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          {"type": "feat", "release": "minor"},
+          {"type": "fix", "release": "patch"},
+          {"type": "perf", "release": "patch"},
+          {"type": "revert", "release": "patch"},
+          {"type": "docs", "release": false},
+          {"type": "style", "release": false},
+          {"type": "chore", "release": false},
+          {"type": "refactor", "release": "patch"},
+          {"type": "test", "release": false},
+          {"type": "build", "release": "patch"},
+          {"type": "ci", "release": false},
+          {"breaking": true, "release": "major"}
+        ],
+        "parserOpts": {
+          "noteKeywords": ["BREAKING CHANGE"]
+        }
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            {"type": "feat", "section": "🚀 Features"},
+            {"type": "fix", "section": "🐛 Bug Fixes"},
+            {"type": "perf", "section": "⚡ Performance Improvements"},
+            {"type": "revert", "section": "🔄 Reverts"},
+            {"type": "docs", "section": "📚 Documentation", "hidden": false},
+            {"type": "style", "section": "💅 Styles", "hidden": true},
+            {"type": "chore", "section": "🔧 Chores", "hidden": true},
+            {"type": "refactor", "section": "♻️ Code Refactoring"},
+            {"type": "test", "section": "✅ Tests", "hidden": false},
+            {"type": "build", "section": "🏗️ Build System"},
+            {"type": "ci", "section": "👷 CI/CD", "hidden": false}
+          ]
+        }
+      }
+    ],
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md",
+        "changelogTitle": "# Changelog\n\nAll notable changes to Graph Hypernetwork Forge will be documented in this file. See [Conventional Commits](https://conventionalcommits.org) for commit guidelines."
+      }
+    ],
+    [
+      "@semantic-release/npm",
+      {
+        "npmPublish": false,
+        "tarballDir": "dist"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {"path": "dist/*.tar.gz", "label": "Source Code (tar.gz)"},
+          {"path": "dist/*.whl", "label": "Python Wheel"},
+          {"path": "CHANGELOG.md", "label": "Changelog"}
+        ],
+        "addReleases": "bottom",
+        "discussionCategoryName": "Releases"
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.md", "pyproject.toml"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ]
+  ],
+  "tagFormat": "v${version}",
+  "repositoryUrl": "https://github.com/danieleschmidt/Graph-Hypernetwork-Forge.git"
+}
