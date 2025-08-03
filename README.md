@@ -66,11 +66,22 @@ model = HyperGNN(
     num_layers=3
 )
 
-# Generate GNN weights from node descriptions
-weights = model.generate_weights(kg.node_texts)
+# Perform zero-shot inference (weights generated automatically)
+predictions = model(kg.edge_index, kg.node_features, kg.node_texts)
 
-# Perform zero-shot inference
-predictions = model.forward(kg.edge_index, kg.node_features, weights)
+# For explicit weight generation
+weights = model.generate_weights(kg.node_texts)
+print(f"Generated {len(weights)} layer weights from text descriptions!")
+```
+
+### 🎮 Interactive Demo
+
+```bash
+# Run the interactive demonstration
+python scripts/demo.py
+
+# Try the getting started notebook
+jupyter notebook notebooks/getting_started.ipynb
 ```
 
 ## 📊 Benchmarks
@@ -122,50 +133,115 @@ graph-hypernetwork-forge/
 - **Dynamic Ontologies**: Handle KGs with evolving schemas without retraining
 - **Few-Shot Learning**: Quickly adapt to new entity types using textual descriptions
 
-## 💻 Training
+## 💻 Training & Evaluation
+
+### Training Models
 
 ```bash
-# Train on standard benchmark
-python scripts/train.py --config configs/hypergnn_base.yaml
-
-# Custom dataset training
+# Train on synthetic social network data
 python scripts/train.py \
-    --config configs/hypergnn_custom.yaml \
-    --data.path /path/to/your/kg \
-    --model.text_encoder bert-base-uncased
+    --domain social \
+    --num-graphs 10 \
+    --num-epochs 50 \
+    --save-model
 
-# Distributed training
-torchrun --nproc_per_node=4 scripts/train.py \
-    --config configs/hypergnn_distributed.yaml
+# Train on custom dataset
+python scripts/train.py \
+    --data-path /path/to/your/kg.json \
+    --gnn-backbone GAT \
+    --hidden-dim 256 \
+    --output-dir ./my_model
+
+# Train with Weights & Biases logging
+python scripts/train.py \
+    --wandb-project hypergnn-experiments \
+    --domain citation
 ```
 
-## 🔬 Advanced Usage
+### Evaluation & Testing
 
-### Custom Text Encoders
+```bash
+# Evaluate trained model
+python scripts/evaluate.py \
+    --model-path ./outputs/best_model.pt \
+    --test-data-path /path/to/test.json
+
+# Zero-shot transfer evaluation
+python scripts/evaluate.py \
+    --model-path ./outputs/best_model.pt \
+    --zero-shot \
+    --source-domain social \
+    --target-domain citation
+```
+
+## 📚 Examples & Tutorials
+
+### Interactive Tutorials
+- 📓 **[Getting Started Notebook](notebooks/getting_started.ipynb)** - Complete introduction with examples
+- 🔗 **[Knowledge Graph Completion](examples/knowledge_graph_completion.py)** - Link prediction with HyperGNN
+- 🌐 **[Cross-Domain Transfer](examples/cross_domain_transfer.py)** - Zero-shot transfer across 5 domains
+- 🎮 **[Interactive Demo](scripts/demo.py)** - Live demonstration of all features
+
+### 🔬 Advanced Usage
+
+#### Custom Text Encoders
 
 ```python
-from graph_hypernetwork_forge import CustomTextEncoder
+from graph_hypernetwork_forge.models.hypergnn import TextEncoder
+import torch.nn as nn
 
-class DomainSpecificEncoder(CustomTextEncoder):
-    def __init__(self, model_name, domain_vocab):
-        super().__init__(model_name)
-        self.domain_embeddings = nn.Embedding(len(domain_vocab), 768)
+class DomainSpecificEncoder(TextEncoder):
+    def __init__(self, base_model, domain_vocab):
+        super().__init__(base_model)
+        self.domain_embeddings = nn.Embedding(len(domain_vocab), self.embedding_dim)
     
-    def encode(self, texts):
-        # Your custom encoding logic
-        pass
+    def forward(self, texts):
+        base_embeddings = super().forward(texts)
+        # Add domain-specific processing
+        return self.domain_transform(base_embeddings)
 
+# Use in HyperGNN
 model = HyperGNN(text_encoder=DomainSpecificEncoder(...))
 ```
 
-### Multi-Modal Hypernetworks
+#### Training Custom Models
 
 ```python
-# Combine text with other node metadata
-model = HyperGNN(
-    modalities=["text", "image", "numerical"],
-    fusion_method="cross_attention"
+from graph_hypernetwork_forge.utils import HyperGNNTrainer
+
+# Setup trainer with custom configuration
+trainer = HyperGNNTrainer(
+    model=model,
+    optimizer=torch.optim.Adam(model.parameters(), lr=1e-3),
+    device="cuda",
+    wandb_project="my-experiments"
 )
+
+# Train with early stopping
+history = trainer.train(
+    train_graphs=train_graphs,
+    val_graphs=val_graphs,
+    num_epochs=100,
+    task_type="node_classification",
+    early_stopping_patience=15
+)
+```
+
+#### Zero-Shot Evaluation
+
+```python
+from graph_hypernetwork_forge.utils import ZeroShotEvaluator
+
+evaluator = ZeroShotEvaluator(trained_model)
+
+# Evaluate transfer performance
+results = evaluator.evaluate_transfer(
+    source_graphs=source_domain_graphs,
+    target_graphs=target_domain_graphs,
+    task_type="node_classification"
+)
+
+print(f"Zero-shot accuracy: {results['zero_shot_accuracy']:.4f}")
 ```
 
 ## 🤝 Contributing
