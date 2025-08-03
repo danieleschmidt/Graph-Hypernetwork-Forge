@@ -1,10 +1,132 @@
-"""Tests for core model components."""
+"""Comprehensive tests for core model components."""
 import pytest
 import torch
+import torch.nn as nn
+import numpy as np
 from unittest.mock import Mock, patch
+import tempfile
+from pathlib import Path
 
-from graph_hypernetwork_forge.models import HyperGNN
+from graph_hypernetwork_forge.models import (
+    HyperGNN,
+    TextEncoder,
+    get_text_encoder,
+    WeightGenerator,
+    DynamicGNN,
+    get_gnn_backbone,
+)
+from graph_hypernetwork_forge.models.encoders import (
+    SentenceTransformerEncoder,
+    TransformerEncoder,
+    CustomTextEncoder,
+)
+from graph_hypernetwork_forge.models.hypernetworks import (
+    AdaptiveWeightGenerator,
+    MultiModalWeightGenerator,
+)
 from graph_hypernetwork_forge.data import TextualKnowledgeGraph
+
+
+class TestTextEncoders:
+    """Test text encoder implementations."""
+    
+    def test_sentence_transformer_encoder(self):
+        """Test sentence transformer encoder."""
+        try:
+            encoder = SentenceTransformerEncoder("all-MiniLM-L6-v2")
+            
+            texts = ["This is a test sentence", "Another test sentence"]
+            embeddings = encoder.encode(texts)
+            
+            assert isinstance(embeddings, torch.Tensor)
+            assert embeddings.shape[0] == len(texts)
+            assert embeddings.shape[1] == encoder.get_output_dim()
+            assert encoder.get_output_dim() > 0
+            
+        except ImportError:
+            pytest.skip("sentence-transformers not available")
+    
+    def test_custom_text_encoder(self):
+        """Test custom text encoder base class."""
+        class TestEncoder(CustomTextEncoder):
+            def __init__(self):
+                super().__init__("test", 256)
+            
+            def encode(self, texts):
+                return torch.randn(len(texts), 256)
+        
+        encoder = TestEncoder()
+        texts = ["test1", "test2"]
+        embeddings = encoder.encode(texts)
+        
+        assert embeddings.shape == (2, 256)
+        assert encoder.get_output_dim() == 256
+    
+    def test_get_text_encoder_factory(self):
+        """Test text encoder factory function."""
+        try:
+            encoder = get_text_encoder("all-MiniLM-L6-v2")
+            assert isinstance(encoder, TextEncoder)
+        except ImportError:
+            pytest.skip("sentence-transformers not available")
+
+
+class TestWeightGenerator:
+    """Test hypernetwork weight generation."""
+    
+    @pytest.fixture
+    def weight_generator(self):
+        """Create weight generator for testing."""
+        return WeightGenerator(
+            text_dim=384,
+            hidden_dim=256,
+            num_layers=2,
+            gnn_type="GAT",
+            num_heads=4,
+        )
+    
+    def test_weight_generator_initialization(self, weight_generator):
+        """Test weight generator initialization."""
+        assert weight_generator.text_dim == 384
+        assert weight_generator.hidden_dim == 256
+        assert weight_generator.num_layers == 2
+        assert weight_generator.gnn_type == "GAT"
+        assert len(weight_generator.param_sizes) > 0
+    
+    def test_weight_generation(self, weight_generator):
+        """Test weight generation from text embeddings."""
+        batch_size = 4
+        text_embeddings = torch.randn(batch_size, 384)
+        
+        weights = weight_generator(text_embeddings)
+        
+        assert isinstance(weights, dict)
+        assert len(weights) > 0
+        
+        # Check that all weights have correct batch dimension
+        for param_name, param_tensor in weights.items():
+            assert param_tensor.shape[0] == batch_size
+            assert param_name in weight_generator.param_sizes
+
+
+class TestDynamicGNN:
+    """Test dynamic GNN implementations."""
+    
+    @pytest.fixture(params=["GCN", "GAT", "GraphSAGE"])
+    def gnn_backbone(self, request):
+        """Create different GNN backbones for testing."""
+        return get_gnn_backbone(
+            backbone=request.param,
+            hidden_dim=128,
+            num_layers=2,
+            num_heads=4,
+        )
+    
+    def test_gnn_initialization(self, gnn_backbone):
+        """Test GNN backbone initialization."""
+        assert isinstance(gnn_backbone, DynamicGNN)
+        assert gnn_backbone.hidden_dim == 128
+        assert gnn_backbone.num_layers == 2
 
 
 class TestHyperGNN:
