@@ -261,9 +261,9 @@ If you use this code in your research, please cite:
 ```bibtex
 @software{graph_hypernetwork_forge,
   title = {Graph Hypernetwork Forge: Zero-Shot GNN Weight Generation from Text},
-  author = {Your Name},
+  author = {Daniel Schmidt},
   year = {2025},
-  url = {https://github.com/yourusername/graph-hypernetwork-forge}
+  url = {https://github.com/danieleschmidt/graph-hypernetwork-forge}
 }
 ```
 
