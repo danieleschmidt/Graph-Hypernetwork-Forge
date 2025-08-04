@@ -3,7 +3,7 @@
 # Install with: pip install -r requirements-security-lock.txt
 
 # Security scanning tools
-bandit[toml]==1.7.5
+bandit[toml]==1.8.6
 safety==2.3.5
 semgrep==1.50.0
 
