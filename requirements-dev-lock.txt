@@ -12,7 +12,7 @@ pytest-mock==3.12.0
 black==25.1.0
 isort==5.13.2
 flake8==6.1.0
-mypy==1.8.0
+mypy==1.17.1
 
 # Pre-commit and security
 pre-commit==3.6.0
