@@ -15,7 +15,7 @@ flake8==6.1.0
 mypy==1.17.1
 
 # Pre-commit and security
-pre-commit==3.6.0
+pre-commit==4.2.0
 bandit[toml]==1.8.6
 safety==2.3.5
 
