@@ -1,0 +1,247 @@
+{
+  "system_info": {
+    "timestamp": 1754578924.1833773,
+    "uptime_seconds": 39.67024350166321,
+    "cpu_percent": 0.0,
+    "cpu_count": 2,
+    "memory_total_gb": 3.8496856689453125,
+    "memory_available_gb": 2.8278427124023438,
+    "memory_percent": 26.5,
+    "process_memory_mb": 827.609375,
+    "gpu_available": false
+  },
+  "metrics": {
+    "text_encoding_optimized": {
+      "operation": "text_encoding_optimized",
+      "call_count": 12,
+      "error_count": 0,
+      "error_rate": 0.0,
+      "total_time": 34.30341672897339,
+      "average_time": 2.8586180607477822,
+      "average_cpu_time": 1.4608333333333332,
+      "memory_peak_mb": 827.609375,
+      "memory_current_mb": 827.609375,
+      "gpu_memory_peak_mb": 0.0,
+      "gpu_memory_current_mb": 0.0,
+      "throughput": 0.0,
+      "additional_metrics": {
+        "function": [
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching",
+          "encode_texts_with_caching"
+        ]
+      }
+    },
+    "first_pass": {
+      "operation": "first_pass",
+      "call_count": 1,
+      "error_count": 0,
+      "error_rate": 0.0,
+      "total_time": 4.3504416942596436,
+      "average_time": 4.3504416942596436,
+      "average_cpu_time": 2.92,
+      "memory_peak_mb": 561.21484375,
+      "memory_current_mb": 561.21484375,
+      "gpu_memory_peak_mb": 0.0,
+      "gpu_memory_current_mb": 0.0,
+      "throughput": 114.93085878147593,
+      "additional_metrics": {
+        "item_count": [
+          500
+        ]
+      }
+    },
+    "second_pass": {
+      "operation": "second_pass",
+      "call_count": 1,
+      "error_count": 0,
+      "error_rate": 0.0,
+      "total_time": 4.151200294494629,
+      "average_time": 4.151200294494629,
+      "average_cpu_time": 2.83,
+      "memory_peak_mb": 612.50390625,
+      "memory_current_mb": 612.50390625,
+      "gpu_memory_peak_mb": 0.0,
+      "gpu_memory_current_mb": 0.0,
+      "throughput": 120.44709108907752,
+      "additional_metrics": {
+        "item_count": [
+          500
+        ]
+      }
+    },
+    "graph_processing_batched": {
+      "operation": "graph_processing_batched",
+      "call_count": 1,
+      "error_count": 0,
+      "error_rate": 0.0,
+      "total_time": 30.9336416721344,
+      "average_time": 30.9336416721344,
+      "average_cpu_time": 16.81,
+      "memory_peak_mb": 827.609375,
+      "memory_current_mb": 827.609375,
+      "gpu_memory_peak_mb": 0.0,
+      "gpu_memory_current_mb": 0.0,
+      "throughput": 0.0,
+      "additional_metrics": {
+        "function": [
+          "process_large_graph_with_batching"
+        ]
+      }
+    }
+  },
+  "history": {
+    "text_encoding_optimized": [
+      {
+        "timestamp": 1754578888.8934207,
+        "total_time": 4.349664688110352,
+        "cpu_time": 2.92,
+        "memory_delta": 82.0234375,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578893.044783,
+        "total_time": 4.150793790817261,
+        "cpu_time": 2.83,
+        "memory_delta": 51.2890625,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578900.144665,
+        "total_time": 2.354529619216919,
+        "cpu_time": 1.1400000000000006,
+        "memory_delta": 57.70703125,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578902.9596055,
+        "total_time": 2.7753114700317383,
+        "cpu_time": 1.3999999999999986,
+        "memory_delta": 0.4609375,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578905.6167116,
+        "total_time": 2.62060546875,
+        "cpu_time": 1.3099999999999987,
+        "memory_delta": 51.765625,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578908.2186513,
+        "total_time": 2.5537147521972656,
+        "cpu_time": 1.2399999999999984,
+        "memory_delta": 58.17578125,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578911.3195562,
+        "total_time": 3.0640463829040527,
+        "cpu_time": 1.2699999999999996,
+        "memory_delta": 50.51953125,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578914.2086115,
+        "total_time": 2.8304286003112793,
+        "cpu_time": 1.3000000000000007,
+        "memory_delta": 50.4140625,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578916.7127438,
+        "total_time": 2.4674770832061768,
+        "cpu_time": 1.2100000000000009,
+        "memory_delta": 0.0078125,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578919.1658194,
+        "total_time": 2.4137675762176514,
+        "cpu_time": 1.0899999999999999,
+        "memory_delta": 40.85546875,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578921.9213157,
+        "total_time": 2.7090139389038086,
+        "cpu_time": 1.0500000000000007,
+        "memory_delta": 47.31640625,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      },
+      {
+        "timestamp": 1754578923.9707806,
+        "total_time": 2.0140633583068848,
+        "cpu_time": 0.7699999999999996,
+        "memory_delta": 51.15234375,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "encode_texts_with_caching"
+      }
+    ],
+    "first_pass": [
+      {
+        "timestamp": 1754578888.89355,
+        "total_time": 4.3504416942596436,
+        "cpu_time": 2.92,
+        "memory_delta": 82.0234375,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "item_count": 500
+      }
+    ],
+    "second_pass": [
+      {
+        "timestamp": 1754578893.044896,
+        "total_time": 4.151200294494629,
+        "cpu_time": 2.83,
+        "memory_delta": 51.2890625,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "item_count": 500
+      }
+    ],
+    "graph_processing_batched": [
+      {
+        "timestamp": 1754578923.9813018,
+        "total_time": 30.9336416721344,
+        "cpu_time": 16.81,
+        "memory_delta": 215.10546875,
+        "gpu_memory_delta": 0,
+        "error": false,
+        "function": "process_large_graph_with_batching"
+      }
+    ]
+  }
+}
