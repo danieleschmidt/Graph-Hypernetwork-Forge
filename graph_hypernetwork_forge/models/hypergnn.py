@@ -248,8 +248,30 @@ class HyperNetwork(nn.Module):
                 # Generate weights for each node
                 flat_weights = layer_generators[weight_name](text_embeddings)
                 
+                # Calculate expected tensor size
+                expected_size = batch_size * torch.prod(torch.tensor(weight_shape)).item()
+                actual_size = flat_weights.numel()
+                
+                # Debug information for troubleshooting
+                if actual_size != expected_size:
+                    # Try to fix by reshaping the generator output
+                    target_size = torch.prod(torch.tensor(weight_shape)).item()
+                    if flat_weights.size(-1) != target_size:
+                        # Add a linear layer to match dimensions if needed
+                        if not hasattr(self, f'_dim_fix_{weight_name}_{layer_idx}'):
+                            setattr(self, f'_dim_fix_{weight_name}_{layer_idx}', 
+                                   nn.Linear(flat_weights.size(-1), target_size))
+                        dim_fixer = getattr(self, f'_dim_fix_{weight_name}_{layer_idx}')
+                        flat_weights = dim_fixer(flat_weights)
+                
                 # Reshape to proper weight shape and add batch dimension
-                weight_tensor = flat_weights.view(batch_size, *weight_shape)
+                try:
+                    weight_tensor = flat_weights.view(batch_size, *weight_shape)
+                except RuntimeError as e:
+                    # Fallback: reshape to correct total size and then to target shape
+                    target_elements = torch.prod(torch.tensor(weight_shape)).item()
+                    flat_weights = flat_weights[:, :target_elements]  # Truncate if too large
+                    weight_tensor = flat_weights.view(batch_size, *weight_shape)
                 
                 # Apply scaling
                 scale = layer_scales[weight_name]

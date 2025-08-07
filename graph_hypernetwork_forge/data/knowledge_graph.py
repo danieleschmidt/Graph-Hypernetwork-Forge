@@ -21,8 +21,8 @@ class TextualKnowledgeGraph:
 
     def __init__(
         self,
-        edge_index: torch.Tensor,
-        node_texts: List[str],
+        edge_index: Optional[torch.Tensor] = None,
+        node_texts: Optional[List[str]] = None,
         edge_types: Optional[List[str]] = None,
         node_features: Optional[torch.Tensor] = None,
         edge_attributes: Optional[torch.Tensor] = None,
@@ -40,10 +40,10 @@ class TextualKnowledgeGraph:
             node_labels: Optional node labels for supervised learning
             metadata: Additional metadata dictionary
         """
+        self.node_texts = node_texts or []
         self.edge_index = edge_index
-        self.node_texts = node_texts
-        self.num_nodes = len(node_texts)
-        self.num_edges = edge_index.size(1)
+        self.num_nodes = len(self.node_texts)
+        self.num_edges = edge_index.size(1) if edge_index is not None else 0
         
         # Optional attributes
         self.edge_types = edge_types or [f"edge_{i}" for i in range(self.num_edges)]
@@ -53,17 +53,19 @@ class TextualKnowledgeGraph:
         self.metadata = metadata or {}
         
         # Validate consistency
-        self._validate()
+        if edge_index is not None or self.node_texts:
+            self._validate()
 
     def _validate(self) -> None:
         """Validate the consistency of the knowledge graph data."""
         # Check edge index bounds
-        max_node_idx = self.edge_index.max().item()
-        if max_node_idx >= self.num_nodes:
-            raise ValueError(
-                f"Edge index contains node {max_node_idx} but only "
-                f"{self.num_nodes} nodes exist"
-            )
+        if self.edge_index is not None and self.edge_index.numel() > 0:
+            max_node_idx = self.edge_index.max().item()
+            if max_node_idx >= self.num_nodes:
+                raise ValueError(
+                    f"Edge index contains node {max_node_idx} but only "
+                    f"{self.num_nodes} nodes exist"
+                )
         
         # Check optional tensors dimensions
         if self.node_features is not None:
@@ -380,6 +382,268 @@ class TextualKnowledgeGraph:
             stats["num_classes"] = len(torch.unique(self.node_labels))
         
         return stats
+
+    def add_node(
+        self, 
+        text: str, 
+        features: Optional[List[float]] = None, 
+        label: Optional[int] = None
+    ) -> int:
+        """Add a new node to the knowledge graph.
+        
+        Args:
+            text: Textual description of the node
+            features: Optional feature vector for the node
+            label: Optional label for the node
+            
+        Returns:
+            Index of the newly added node
+        """
+        self.node_texts.append(text)
+        node_idx = len(self.node_texts) - 1
+        self.num_nodes = len(self.node_texts)
+        
+        # Add features if provided
+        if features is not None:
+            feature_tensor = torch.tensor([features], dtype=torch.float32)
+            if self.node_features is None:
+                self.node_features = feature_tensor
+            else:
+                self.node_features = torch.cat([self.node_features, feature_tensor], dim=0)
+        elif self.node_features is not None:
+            # Pad with zeros if other nodes have features
+            feature_dim = self.node_features.size(1)
+            zero_features = torch.zeros(1, feature_dim, dtype=torch.float32)
+            self.node_features = torch.cat([self.node_features, zero_features], dim=0)
+        
+        # Add label if provided
+        if label is not None:
+            label_tensor = torch.tensor([label], dtype=torch.long)
+            if self.node_labels is None:
+                self.node_labels = label_tensor
+            else:
+                self.node_labels = torch.cat([self.node_labels, label_tensor], dim=0)
+        elif self.node_labels is not None:
+            # Pad with -1 if other nodes have labels
+            default_label = torch.tensor([-1], dtype=torch.long)
+            self.node_labels = torch.cat([self.node_labels, default_label], dim=0)
+        
+        return node_idx
+
+    def add_edge(
+        self, 
+        source: int, 
+        target: int, 
+        edge_type: str = "unknown",
+        attributes: Optional[List[float]] = None,
+        bidirectional: bool = False
+    ) -> None:
+        """Add an edge to the knowledge graph.
+        
+        Args:
+            source: Source node index
+            target: Target node index
+            edge_type: Type/label of the edge
+            attributes: Optional edge attributes
+            bidirectional: Whether to add edge in both directions
+        """
+        # Validate node indices
+        if source < 0 or source >= self.num_nodes:
+            raise IndexError(f"Source node {source} is out of range [0, {self.num_nodes})")
+        if target < 0 or target >= self.num_nodes:
+            raise IndexError(f"Target node {target} is out of range [0, {self.num_nodes})")
+        
+        # Create edge tensors
+        if bidirectional:
+            new_edges = torch.tensor([[source, target], [target, source]], dtype=torch.long).t()
+            new_edge_types = [edge_type, edge_type]
+        else:
+            new_edges = torch.tensor([[source], [target]], dtype=torch.long)
+            new_edge_types = [edge_type]
+        
+        # Add to edge index
+        if self.edge_index is None:
+            self.edge_index = new_edges
+            unique_new_edges = new_edges.t().tolist()
+            unique_new_types = new_edge_types
+        else:
+            # Check for duplicate edges (optional - can be disabled for performance)
+            existing_edges = self.edge_index.t().tolist()
+            new_edge_list = new_edges.t().tolist()
+            unique_new_edges = []
+            unique_new_types = []
+            
+            for i, edge in enumerate(new_edge_list):
+                if edge not in existing_edges:
+                    unique_new_edges.append(edge)
+                    unique_new_types.append(new_edge_types[i])
+            
+            if unique_new_edges:
+                unique_edges_tensor = torch.tensor(unique_new_edges, dtype=torch.long).t()
+                self.edge_index = torch.cat([self.edge_index, unique_edges_tensor], dim=1)
+                self.edge_types.extend(unique_new_types)
+        
+        self.num_edges = self.edge_index.size(1) if self.edge_index is not None else 0
+        
+        # Add edge attributes if provided
+        if attributes is not None:
+            num_new_edges = len(new_edge_types) if unique_new_edges else 0
+            if num_new_edges > 0:
+                attr_tensor = torch.tensor([attributes] * num_new_edges, dtype=torch.float32)
+                if self.edge_attributes is None:
+                    self.edge_attributes = attr_tensor
+                else:
+                    self.edge_attributes = torch.cat([self.edge_attributes, attr_tensor], dim=0)
+        elif self.edge_attributes is not None and unique_new_edges:
+            # Pad with zeros if other edges have attributes
+            attr_dim = self.edge_attributes.size(1)
+            num_new_edges = len(unique_new_edges)
+            zero_attrs = torch.zeros(num_new_edges, attr_dim, dtype=torch.float32)
+            self.edge_attributes = torch.cat([self.edge_attributes, zero_attrs], dim=0)
+
+    def encode_texts(
+        self, 
+        texts: Optional[List[str]] = None,
+        model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    ) -> torch.Tensor:
+        """Encode text descriptions using a sentence transformer.
+        
+        Args:
+            texts: List of texts to encode (uses node_texts if None)
+            model_name: Name of the sentence transformer model
+            
+        Returns:
+            Text embeddings tensor
+        """
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError:
+            raise ImportError("sentence-transformers is required for text encoding")
+        
+        if texts is None:
+            texts = self.node_texts
+        
+        if not texts:
+            return torch.empty(0, 384)  # Default embedding dimension
+        
+        model = SentenceTransformer(model_name)
+        embeddings = model.encode(texts, convert_to_tensor=True)
+        return embeddings
+
+    def to_dict(self) -> Dict:
+        """Convert knowledge graph to dictionary representation.
+        
+        Returns:
+            Dictionary representation of the knowledge graph
+        """
+        # Convert nodes
+        nodes = []
+        for i, text in enumerate(self.node_texts):
+            node_dict = {"id": i, "text": text}
+            
+            if self.node_features is not None:
+                node_dict["features"] = self.node_features[i].tolist()
+            
+            if self.node_labels is not None:
+                node_dict["label"] = self.node_labels[i].item()
+            
+            nodes.append(node_dict)
+        
+        # Convert edges
+        edges = []
+        if self.edge_index is not None:
+            edge_list = self.edge_index.t().tolist()
+            for i, (source, target) in enumerate(edge_list):
+                edge_dict = {"source": source, "target": target}
+                
+                if i < len(self.edge_types):
+                    edge_dict["type"] = self.edge_types[i]
+                
+                if self.edge_attributes is not None and i < self.edge_attributes.size(0):
+                    edge_dict["attributes"] = self.edge_attributes[i].tolist()
+                
+                edges.append(edge_dict)
+        
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "metadata": self.metadata
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "TextualKnowledgeGraph":
+        """Create knowledge graph from dictionary representation.
+        
+        Args:
+            data: Dictionary containing nodes and edges
+            
+        Returns:
+            TextualKnowledgeGraph instance
+        """
+        # Extract nodes
+        nodes = sorted(data["nodes"], key=lambda x: x["id"])
+        node_texts = [node["text"] for node in nodes]
+        
+        # Extract node features if present
+        node_features = None
+        if nodes and "features" in nodes[0]:
+            features_list = [node.get("features", []) for node in nodes]
+            if any(features_list):
+                node_features = torch.tensor(features_list, dtype=torch.float32)
+        
+        # Extract node labels if present
+        node_labels = None
+        if nodes and "label" in nodes[0]:
+            labels_list = [node.get("label", -1) for node in nodes]
+            node_labels = torch.tensor(labels_list, dtype=torch.long)
+        
+        # Extract edges
+        edges = data.get("edges", [])
+        if edges:
+            # Handle both list format [[0,1], [1,2]] and dict format
+            if isinstance(edges[0], list):
+                edge_list = edges
+                edge_types = ["unknown"] * len(edges)
+                edge_attributes = None
+            else:
+                edge_list = [[edge["source"], edge["target"]] for edge in edges]
+                edge_types = [edge.get("type", "unknown") for edge in edges]
+                
+                # Extract edge attributes if present
+                edge_attributes = None
+                if "attributes" in edges[0]:
+                    attr_list = [edge.get("attributes", []) for edge in edges]
+                    if any(attr_list):
+                        edge_attributes = torch.tensor(attr_list, dtype=torch.float32)
+            
+            edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
+        else:
+            edge_index = None
+            edge_types = []
+            edge_attributes = None
+        
+        # Extract metadata
+        metadata = data.get("metadata", {})
+        
+        return cls(
+            edge_index=edge_index,
+            node_texts=node_texts,
+            edge_types=edge_types,
+            node_features=node_features,
+            edge_attributes=edge_attributes,
+            node_labels=node_labels,
+            metadata=metadata,
+        )
+
+    def to_json(self, file_path: Union[str, Path]) -> None:
+        """Save knowledge graph to JSON file.
+        
+        Args:
+            file_path: Output file path
+        """
+        data = self.to_dict()
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
     def __repr__(self) -> str:
         """String representation of the knowledge graph."""
