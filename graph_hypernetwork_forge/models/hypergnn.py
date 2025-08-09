@@ -10,6 +10,17 @@ from sentence_transformers import SentenceTransformer
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv, MessagePassing
 from transformers import AutoModel, AutoTokenizer
 
+# Import optimization utilities
+try:
+    from ..utils.optimization import WeightCache, profile_function, AdaptiveDropout
+except ImportError:
+    # Fallback for when utils are not available
+    WeightCache = None
+    def profile_function(name, profiler=None): 
+        def decorator(func): return func
+        return decorator
+    AdaptiveDropout = nn.Dropout
+
 
 class TextEncoder(nn.Module):
     """Encodes text descriptions into embeddings."""
@@ -75,10 +86,20 @@ class TextEncoder(nn.Module):
         """
         if self.is_sentence_transformer:
             # Use sentence-transformers
-            with torch.no_grad() if self.freeze_encoder else torch.enable_grad():
+            if self.freeze_encoder:
+                with torch.no_grad():
+                    embeddings = self.encoder.encode(
+                        texts, convert_to_tensor=True, show_progress_bar=False
+                    )
+                    # Clone to make it compatible with autograd
+                    embeddings = embeddings.clone().detach().requires_grad_(False)
+            else:
                 embeddings = self.encoder.encode(
                     texts, convert_to_tensor=True, show_progress_bar=False
                 )
+                # Ensure autograd compatibility
+                if not embeddings.requires_grad:
+                    embeddings = embeddings.clone().requires_grad_(True)
         else:
             # Use transformers
             inputs = self.tokenizer(
@@ -138,13 +159,13 @@ class HyperNetwork(nn.Module):
                 weight_size = torch.prod(torch.tensor(weight_shape)).item()
                 
                 generator = nn.Sequential(
-                    nn.Linear(text_dim, text_dim * 2),
+                    nn.Linear(self.text_dim, self.text_dim * 2),
                     nn.ReLU(),
                     nn.Dropout(dropout),
-                    nn.Linear(text_dim * 2, text_dim),
+                    nn.Linear(self.text_dim * 2, self.text_dim),
                     nn.ReLU(),
                     nn.Dropout(dropout),
-                    nn.Linear(text_dim, weight_size),
+                    nn.Linear(self.text_dim, weight_size),
                 )
                 
                 layer_generators[weight_name] = generator
@@ -225,53 +246,49 @@ class HyperNetwork(nn.Module):
             
             # Update dimensions for first and last layers
             updated_dims = self.weight_dims[layer_idx].copy()
+            
+            # Determine actual output dimension for this layer
+            if layer_idx == self.num_layers - 1:
+                actual_output_dim = output_dim
+            else:
+                actual_output_dim = self.hidden_dim
+            
+            # Update first layer input dimensions
             if layer_idx == 0:
                 for key in updated_dims:
-                    if "weight" in key or "lin_l" in key or "lin_r" in key:
+                    if key == "weight" or "lin_l" in key or "lin_r" in key:
                         shape = list(updated_dims[key])
                         shape[0] = input_dim
                         updated_dims[key] = tuple(shape)
-            if layer_idx == self.num_layers - 1:
-                for key in updated_dims:
-                    if "weight" in key or "lin_l" in key or "lin_r" in key:
-                        shape = list(updated_dims[key])
-                        shape[1] = output_dim
-                        updated_dims[key] = tuple(shape)
-                    elif "bias" in key:
-                        updated_dims[key] = (output_dim,)
-                    elif "att_weight" in key:
-                        shape = list(updated_dims[key])
-                        shape[0] = 2 * output_dim
-                        updated_dims[key] = tuple(shape)
+            
+            # Update output dimensions for all layers
+            for key in updated_dims:
+                if key == "weight" or "lin_l" in key or "lin_r" in key:
+                    shape = list(updated_dims[key])
+                    shape[1] = actual_output_dim
+                    updated_dims[key] = tuple(shape)
+                elif "bias" in key:
+                    updated_dims[key] = (actual_output_dim,)
+                elif key == "att_weight":
+                    shape = list(updated_dims[key])
+                    shape[0] = 2 * actual_output_dim  # 2 * output_dim for concatenated attention
+                    updated_dims[key] = tuple(shape)
             
             for weight_name, weight_shape in updated_dims.items():
                 # Generate weights for each node
                 flat_weights = layer_generators[weight_name](text_embeddings)
                 
-                # Calculate expected tensor size
-                expected_size = batch_size * torch.prod(torch.tensor(weight_shape)).item()
-                actual_size = flat_weights.numel()
+                # Calculate expected output size
+                target_elements = torch.prod(torch.tensor(weight_shape)).item()
                 
-                # Debug information for troubleshooting
-                if actual_size != expected_size:
-                    # Try to fix by reshaping the generator output
-                    target_size = torch.prod(torch.tensor(weight_shape)).item()
-                    if flat_weights.size(-1) != target_size:
-                        # Add a linear layer to match dimensions if needed
-                        if not hasattr(self, f'_dim_fix_{weight_name}_{layer_idx}'):
-                            setattr(self, f'_dim_fix_{weight_name}_{layer_idx}', 
-                                   nn.Linear(flat_weights.size(-1), target_size))
-                        dim_fixer = getattr(self, f'_dim_fix_{weight_name}_{layer_idx}')
-                        flat_weights = dim_fixer(flat_weights)
+                # Ensure correct output size
+                if flat_weights.size(-1) != target_elements:
+                    raise RuntimeError(f"Weight generator for {weight_name} in layer {layer_idx} "
+                                     f"produces {flat_weights.size(-1)} elements, "
+                                     f"but expected {target_elements} for shape {weight_shape}")
                 
-                # Reshape to proper weight shape and add batch dimension
-                try:
-                    weight_tensor = flat_weights.view(batch_size, *weight_shape)
-                except RuntimeError as e:
-                    # Fallback: reshape to correct total size and then to target shape
-                    target_elements = torch.prod(torch.tensor(weight_shape)).item()
-                    flat_weights = flat_weights[:, :target_elements]  # Truncate if too large
-                    weight_tensor = flat_weights.view(batch_size, *weight_shape)
+                # Reshape to proper weight shape
+                weight_tensor = flat_weights.view(batch_size, *weight_shape)
                 
                 # Apply scaling
                 scale = layer_scales[weight_name]
@@ -384,9 +401,10 @@ class DynamicGNN(nn.Module):
         
         # Attention scores
         att_input = torch.cat([h_i, h_j], dim=1)  # [num_edges, 2*out_dim]
-        # Use mean attention weight across nodes for simplicity
-        mean_att_weight = att_weight.mean(dim=0)  # [2*out_dim, 1]
-        att_scores = torch.mm(att_input, mean_att_weight).squeeze()  # [num_edges]
+        # Use source node attention weights for each edge
+        source_att_weights = att_weight[row]  # [num_edges, 2*out_dim, 1]
+        # Batch matrix multiplication for attention scores
+        att_scores = torch.bmm(att_input.unsqueeze(1), source_att_weights).squeeze()  # [num_edges]
         att_scores = F.leaky_relu(att_scores, 0.2)
         
         # Apply softmax per target node
@@ -453,6 +471,8 @@ class HyperGNN(nn.Module):
         num_layers: int = 3,
         dropout: float = 0.1,
         freeze_text_encoder: bool = False,
+        enable_caching: bool = True,
+        cache_size: int = 1000,
     ):
         """Initialize HyperGNN model.
         
@@ -463,6 +483,8 @@ class HyperGNN(nn.Module):
             num_layers: Number of GNN layers
             dropout: Dropout probability
             freeze_text_encoder: Whether to freeze text encoder
+            enable_caching: Whether to enable weight caching
+            cache_size: Maximum number of cached weight sets
         """
         super().__init__()
         self.text_encoder_name = text_encoder
@@ -470,6 +492,13 @@ class HyperGNN(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.dropout = dropout
+        
+        # Optimization features
+        self.enable_caching = enable_caching
+        if enable_caching and WeightCache is not None:
+            self.weight_cache = WeightCache(max_size=cache_size)
+        else:
+            self.weight_cache = None
         
         # Initialize components
         self.text_encoder = TextEncoder(
@@ -491,8 +520,9 @@ class HyperGNN(nn.Module):
             dropout=dropout,
         )
     
+    @profile_function("generate_weights")
     def generate_weights(self, node_texts: List[str]) -> List[Dict[str, torch.Tensor]]:
-        """Generate GNN weights from node texts.
+        """Generate GNN weights from node texts with caching optimization.
         
         Args:
             node_texts: List of node text descriptions
@@ -500,16 +530,28 @@ class HyperGNN(nn.Module):
         Returns:
             Generated weights for each GNN layer
         """
-        # Encode texts
+        # Use model's hidden dimensions
+        input_dim = self.hidden_dim
+        output_dim = self.hidden_dim
+        
+        # Check cache first  
+        if self.weight_cache is not None:
+            cached_weights = self.weight_cache.get(node_texts, input_dim, output_dim)
+            if cached_weights is not None:
+                return cached_weights
+        
+        # Generate weights (most expensive operations)
         text_embeddings = self.text_encoder(node_texts)
-        
-        # Generate weights (assume standard dimensions for now)
-        input_dim = 128  # Default input dimension
-        output_dim = 64  # Default output dimension
-        
         weights = self.hypernetwork(text_embeddings, input_dim, output_dim)
+        
+        # Cache for future use (deep copy to avoid reference issues)
+        if self.weight_cache is not None:
+            cached_weights = [{k: v.clone().detach() for k, v in layer.items()} for layer in weights]
+            self.weight_cache.put(node_texts, input_dim, output_dim, cached_weights)
+        
         return weights
     
+    @profile_function("hypergnn_forward")
     def forward(
         self,
         edge_index: torch.Tensor,

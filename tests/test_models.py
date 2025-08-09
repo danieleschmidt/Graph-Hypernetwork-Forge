@@ -55,19 +55,20 @@ class TestHyperGNN:
         """Test forward pass with real graph data."""
         # Create a simple graph
         edge_index = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
-        node_features = torch.randn(3, 16)
+        hidden_dim = 32
+        node_features = torch.randn(3, hidden_dim)
         node_texts = [
             "First node description",
             "Second node description", 
             "Third node description"
         ]
         
-        model = HyperGNN(hidden_dim=32, num_layers=2)
+        model = HyperGNN(hidden_dim=hidden_dim, num_layers=2)
         
         try:
             output = model(edge_index, node_features, node_texts)
             assert output.shape[0] == 3  # Number of nodes
-            assert output.shape[1] == 32  # Hidden dimension
+            assert output.shape[1] == hidden_dim  # Hidden dimension
         except ImportError:
             pytest.skip("Text encoder dependencies not available")
 
