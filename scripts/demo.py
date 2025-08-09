@@ -45,7 +45,7 @@ def demo_basic_usage():
     print(f"  Num layers: {model.num_layers}")
     
     # Generate some example node features
-    node_features = torch.randn(kg.num_nodes, 32)
+    node_features = torch.randn(kg.num_nodes, model.hidden_dim)
     
     # Forward pass
     print(f"\nPerforming forward pass...")
@@ -94,11 +94,11 @@ def demo_zero_shot_transfer():
     model.eval()
     with torch.no_grad():
         # Source domain
-        source_features = torch.randn(source_kg.num_nodes, 32)
+        source_features = torch.randn(source_kg.num_nodes, model.hidden_dim)
         source_predictions = model(source_kg.edge_index, source_features, source_kg.node_texts)
         
         # Target domain (zero-shot)
-        target_features = torch.randn(target_kg.num_nodes, 32)
+        target_features = torch.randn(target_kg.num_nodes, model.hidden_dim)
         target_predictions = model(target_kg.edge_index, target_features, target_kg.node_texts)
     
     print(f"\nSource domain predictions shape: {source_predictions.shape}")
