@@ -26,5 +26,5 @@ memory-profiler==0.61.0
 coverage==7.4.0
 tox==4.11.4
 pytest-xdist==3.8.0  # For parallel test execution
-pytest-timeout==2.3.1  # For test timeouts
+pytest-timeout==2.4.0  # For test timeouts
 pytest-randomly==3.15.0  # For random test ordering
