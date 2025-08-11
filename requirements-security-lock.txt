@@ -4,7 +4,7 @@
 
 # Security scanning tools
 bandit[toml]==1.8.6
-safety==2.3.5
+safety==3.6.0
 semgrep==1.50.0
 
 # Additional security tools for enhanced scanning
