@@ -4,7 +4,7 @@ dbus-python==1.4.0
 distro==1.9.0
 distro-info==1.7+build1
 httplib2==0.20.4
-launchpadlib==1.11.0
+launchpadlib==2.1.0
 lazr.restfulclient==0.14.6
 lazr.uri==1.0.6
 oauthlib==3.3.1
