@@ -11,6 +11,42 @@ import pandas as pd
 import torch
 from torch_geometric.data import Data
 
+# Import enhanced utilities (if available)
+try:
+    from ..utils.logging_utils import get_logger, log_function_call
+    from ..utils.exceptions import ValidationError
+    from ..utils.memory_utils import MemoryManager
+    ENHANCED_FEATURES = True
+except ImportError:
+    # Fallback for basic functionality
+    def log_function_call(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    
+    def get_logger(name):
+        import logging
+        return logging.getLogger(name)
+    
+    class ValidationError(Exception):
+        pass
+    
+    class DataError(Exception):
+        pass
+    
+    class FileIOError(Exception):
+        pass
+    
+    class MemoryManager:
+        def __init__(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+    
+    ENHANCED_FEATURES = False
+
 
 class TextualKnowledgeGraph:
     """A knowledge graph with textual metadata for each node.
@@ -106,8 +142,35 @@ class TextualKnowledgeGraph:
         Returns:
             TextualKnowledgeGraph instance
         """
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            # Validate JSON structure
+            if not isinstance(data, dict):
+                raise DataError("JSON root", "must be a dictionary/object")
+            
+            if "nodes" not in data:
+                raise DataError("JSON structure", "missing required 'nodes' field")
+            
+            if not isinstance(data["nodes"], list) or len(data["nodes"]) == 0:
+                raise DataError("nodes", "must be a non-empty list")
+            
+            # Logger is not always available in class method, use basic logging
+            if ENHANCED_FEATURES:
+                logger = get_logger(__name__)
+                logger.info(f"Successfully parsed JSON file with {len(data['nodes'])} nodes")
+            else:
+                print(f"Successfully parsed JSON file with {len(data['nodes'])} nodes")
+            
+        except json.JSONDecodeError as e:
+            raise FileIOError(str(file_path), "JSON parsing", e)
+        except UnicodeDecodeError as e:
+            raise FileIOError(str(file_path), "UTF-8 decoding", e)
+        except (DataError, ValidationError):
+            raise
+        except Exception as e:
+            raise FileIOError(str(file_path), "reading", e)
         
         # Extract nodes
         nodes = sorted(data["nodes"], key=lambda x: x["id"])
@@ -327,27 +390,78 @@ class TextualKnowledgeGraph:
         
         return [self.node_texts[i] for i in sorted(neighbors)]
 
+    @log_function_call()
     def save(self, file_path: Union[str, Path]) -> None:
-        """Save knowledge graph to pickle file.
+        """Save knowledge graph to pickle file with error handling.
         
         Args:
             file_path: Output file path
+            
+        Raises:
+            ValidationError: If file path is invalid
+            FileIOError: If saving fails
         """
-        with open(file_path, 'wb') as f:
-            pickle.dump(self, f)
+        path = _validate_file_path(file_path, "saving")
+        
+        # Create parent directory if it doesn't exist
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise FileIOError(str(path), "directory creation", e)
+        
+        try:
+            with open(path, 'wb') as f:
+                pickle.dump(self, f)
+            
+            self.logger.info(f"Knowledge graph saved to {path}")
+            
+        except Exception as e:
+            raise FileIOError(str(path), "pickle saving", e)
 
     @classmethod
+    @log_function_call()
     def load(cls, file_path: Union[str, Path]) -> "TextualKnowledgeGraph":
-        """Load knowledge graph from pickle file.
+        """Load knowledge graph from pickle file with comprehensive error handling.
         
         Args:
             file_path: Input file path
             
         Returns:
             TextualKnowledgeGraph instance
+            
+        Raises:
+            ValidationError: If file path is invalid
+            FileIOError: If loading fails
         """
-        with open(file_path, 'rb') as f:
-            return pickle.load(f)
+        path = _validate_file_path(file_path, "loading")
+        
+        if not path.exists():
+            raise FileIOError(str(path), "reading", FileNotFoundError(f"File not found: {path}"))
+        
+        if not path.is_file():
+            raise FileIOError(str(path), "reading", IsADirectoryError(f"Path is a directory: {path}"))
+        
+        try:
+            with open(path, 'rb') as f:
+                graph = pickle.load(f)
+            
+            # Validate loaded object
+            if not isinstance(graph, cls):
+                raise DataError("loaded_object", f"expected TextualKnowledgeGraph, got {type(graph).__name__}")
+            
+            # Re-validate the loaded graph
+            graph._validate()
+            
+            logger.info(f"Knowledge graph loaded from {path}: {graph.num_nodes} nodes, {graph.num_edges} edges")
+            
+            return graph
+            
+        except pickle.UnpicklingError as e:
+            raise FileIOError(str(path), "pickle loading", e)
+        except Exception as e:
+            if isinstance(e, (DataError, ValidationError, GraphStructureError)):
+                raise
+            raise FileIOError(str(path), "loading", e)
 
     def statistics(self) -> Dict:
         """Get basic statistics of the knowledge graph.
@@ -383,13 +497,14 @@ class TextualKnowledgeGraph:
         
         return stats
 
+    @log_function_call()
     def add_node(
         self, 
         text: str, 
         features: Optional[List[float]] = None, 
         label: Optional[int] = None
     ) -> int:
-        """Add a new node to the knowledge graph.
+        """Add a new node to the knowledge graph with validation.
         
         Args:
             text: Textual description of the node
@@ -398,38 +513,83 @@ class TextualKnowledgeGraph:
             
         Returns:
             Index of the newly added node
+            
+        Raises:
+            ValidationError: If parameters are invalid
+            DataError: If adding node would cause inconsistency
         """
-        self.node_texts.append(text)
-        node_idx = len(self.node_texts) - 1
-        self.num_nodes = len(self.node_texts)
+        # Validate inputs
+        if not isinstance(text, str) or len(text.strip()) == 0:
+            raise ValidationError("text", text, "non-empty string")
         
-        # Add features if provided
         if features is not None:
-            feature_tensor = torch.tensor([features], dtype=torch.float32)
-            if self.node_features is None:
-                self.node_features = feature_tensor
-            else:
-                self.node_features = torch.cat([self.node_features, feature_tensor], dim=0)
-        elif self.node_features is not None:
-            # Pad with zeros if other nodes have features
-            feature_dim = self.node_features.size(1)
-            zero_features = torch.zeros(1, feature_dim, dtype=torch.float32)
-            self.node_features = torch.cat([self.node_features, zero_features], dim=0)
+            if not isinstance(features, list):
+                raise ValidationError("features", type(features).__name__, "list or None")
+            for i, f in enumerate(features):
+                if not isinstance(f, (int, float)):
+                    raise ValidationError(f"features[{i}]", type(f).__name__, "numeric value")
+            
+            # Check feature dimension consistency
+            if self.node_features is not None:
+                expected_dim = self.node_features.size(1)
+                if len(features) != expected_dim:
+                    raise DataError(
+                        "features", 
+                        f"dimension mismatch: got {len(features)}, expected {expected_dim}"
+                    )
         
-        # Add label if provided
         if label is not None:
-            label_tensor = torch.tensor([label], dtype=torch.long)
-            if self.node_labels is None:
-                self.node_labels = label_tensor
-            else:
-                self.node_labels = torch.cat([self.node_labels, label_tensor], dim=0)
-        elif self.node_labels is not None:
-            # Pad with -1 if other nodes have labels
-            default_label = torch.tensor([-1], dtype=torch.long)
-            self.node_labels = torch.cat([self.node_labels, default_label], dim=0)
+            if not isinstance(label, int) or label < -1:
+                raise ValidationError("label", label, "integer >= -1 or None")
         
-        return node_idx
+        self.logger.debug(f"Adding node with text: '{text[:50]}...'")
+        try:
+            # Add node text
+            self.node_texts.append(text)
+            node_idx = len(self.node_texts) - 1
+            self.num_nodes = len(self.node_texts)
+        
+            # Add features if provided
+            if features is not None:
+                feature_tensor = torch.tensor([features], dtype=torch.float32)
+                if self.node_features is None:
+                    self.node_features = feature_tensor
+                else:
+                    self.node_features = torch.cat([self.node_features, feature_tensor], dim=0)
+            elif self.node_features is not None:
+                # Pad with zeros if other nodes have features
+                feature_dim = self.node_features.size(1)
+                zero_features = torch.zeros(1, feature_dim, dtype=torch.float32)
+                self.node_features = torch.cat([self.node_features, zero_features], dim=0)
+            
+            # Add label if provided
+            if label is not None:
+                label_tensor = torch.tensor([label], dtype=torch.long)
+                if self.node_labels is None:
+                    self.node_labels = label_tensor
+                else:
+                    self.node_labels = torch.cat([self.node_labels, label_tensor], dim=0)
+            elif self.node_labels is not None:
+                # Pad with -1 if other nodes have labels
+                default_label = torch.tensor([-1], dtype=torch.long)
+                self.node_labels = torch.cat([self.node_labels, default_label], dim=0)
+            
+            self.logger.debug(f"Successfully added node {node_idx}")
+            return node_idx
+            
+        except Exception as e:
+            # Rollback changes if addition fails
+            if len(self.node_texts) > node_idx:
+                self.node_texts = self.node_texts[:node_idx]
+                self.num_nodes = len(self.node_texts)
+            
+            error_msg = f"Failed to add node: {e}"
+            self.logger.error(error_msg)
+            if isinstance(e, (ValidationError, DataError)):
+                raise
+            raise DataError("node_addition", error_msg)
 
+    @log_function_call()
     def add_edge(
         self, 
         source: int, 
@@ -438,7 +598,7 @@ class TextualKnowledgeGraph:
         attributes: Optional[List[float]] = None,
         bidirectional: bool = False
     ) -> None:
-        """Add an edge to the knowledge graph.
+        """Add an edge to the knowledge graph with comprehensive validation.
         
         Args:
             source: Source node index
@@ -446,12 +606,51 @@ class TextualKnowledgeGraph:
             edge_type: Type/label of the edge
             attributes: Optional edge attributes
             bidirectional: Whether to add edge in both directions
+            
+        Raises:
+            ValidationError: If parameters are invalid
+            GraphStructureError: If edge would create invalid structure
         """
+        # Validate parameters
+        if not isinstance(source, int):
+            raise ValidationError("source", type(source).__name__, "integer")
+        if not isinstance(target, int):
+            raise ValidationError("target", type(target).__name__, "integer")
+        if not isinstance(edge_type, str):
+            raise ValidationError("edge_type", type(edge_type).__name__, "string")
+        if not isinstance(bidirectional, bool):
+            raise ValidationError("bidirectional", type(bidirectional).__name__, "boolean")
+        
         # Validate node indices
         if source < 0 or source >= self.num_nodes:
-            raise IndexError(f"Source node {source} is out of range [0, {self.num_nodes})")
+            raise GraphStructureError(
+                "add_edge", f"Source node {source} is out of range [0, {self.num_nodes})",
+                num_nodes=self.num_nodes
+            )
         if target < 0 or target >= self.num_nodes:
-            raise IndexError(f"Target node {target} is out of range [0, {self.num_nodes})")
+            raise GraphStructureError(
+                "add_edge", f"Target node {target} is out of range [0, {self.num_nodes})",
+                num_nodes=self.num_nodes
+            )
+        
+        # Validate attributes
+        if attributes is not None:
+            if not isinstance(attributes, list):
+                raise ValidationError("attributes", type(attributes).__name__, "list or None")
+            for i, attr in enumerate(attributes):
+                if not isinstance(attr, (int, float)):
+                    raise ValidationError(f"attributes[{i}]", type(attr).__name__, "numeric value")
+            
+            # Check attribute dimension consistency
+            if self.edge_attributes is not None:
+                expected_dim = self.edge_attributes.size(1)
+                if len(attributes) != expected_dim:
+                    raise DataError(
+                        "attributes", 
+                        f"dimension mismatch: got {len(attributes)}, expected {expected_dim}"
+                    )
+        
+        self.logger.debug(f"Adding edge: {source} -> {target} (type: {edge_type}, bidirectional: {bidirectional})")
         
         # Create edge tensors
         if bidirectional:
@@ -635,15 +834,37 @@ class TextualKnowledgeGraph:
             metadata=metadata,
         )
 
+    @log_function_call()
     def to_json(self, file_path: Union[str, Path]) -> None:
-        """Save knowledge graph to JSON file.
+        """Save knowledge graph to JSON file with error handling.
         
         Args:
             file_path: Output file path
+            
+        Raises:
+            ValidationError: If file path is invalid
+            FileIOError: If saving fails
         """
-        data = self.to_dict()
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        path = _validate_file_path(file_path, "JSON saving")
+        
+        # Create parent directory if it doesn't exist
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise FileIOError(str(path), "directory creation", e)
+        
+        try:
+            data = self.to_dict()
+            
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            
+            self.logger.info(f"Knowledge graph saved to JSON: {path}")
+            
+        except Exception as e:
+            if isinstance(e, (ValidationError, DataError)):
+                raise
+            raise FileIOError(str(path), "JSON saving", e)
 
     def __repr__(self) -> str:
         """String representation of the knowledge graph."""

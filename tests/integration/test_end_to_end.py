@@ -38,10 +38,17 @@ class TestCompleteWorkflow:
         assert isinstance(weights, dict)
         assert len(weights) > 0
         
-        # Forward pass
-        predictions = model.forward(kg.edge_index, kg.node_features, weights)
+        # Create node features from text embeddings (typical hypernetwork usage)
+        if kg.node_features is None:
+            # Use text embeddings as node features
+            node_features = model.text_encoder(kg.node_texts)
+        else:
+            node_features = kg.node_features
+        
+        # Forward pass with precomputed weights
+        predictions = model.forward_with_weights(kg.edge_index, node_features, weights)
         assert predictions.shape[0] == kg.num_nodes
-        assert predictions.shape[1] == model.output_dim
+        assert predictions.shape[1] == model.hidden_dim
 
     def test_zero_shot_transfer(self, tmp_path):
         """Test zero-shot transfer between different domains."""

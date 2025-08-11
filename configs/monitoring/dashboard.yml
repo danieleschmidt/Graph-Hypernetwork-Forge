@@ -1,0 +1,248 @@
+# Dashboard configuration for Graph Hypernetwork Forge monitoring
+# This file configures the observability dashboard settings
+
+dashboard:
+  # Dashboard type: "web" or "console"
+  type: "web"
+  
+  # Web dashboard settings (when type is "web")
+  web:
+    host: "0.0.0.0"
+    port: 8080
+    debug: false
+    auto_refresh_interval: 5  # seconds
+    
+  # Console dashboard settings (when type is "console")  
+  console:
+    update_interval: 5.0  # seconds
+    max_lines: 50
+    
+# Data collection settings
+data:
+  # Metrics storage
+  metrics_storage:
+    type: "sqlite"
+    path: "/tmp/ghf_metrics.db"
+    retention_hours: 168  # 7 days
+    
+  # Caching settings
+  cache:
+    enabled: true
+    ttl_seconds: 5
+    max_size: 1000
+    
+  # Data aggregation intervals
+  aggregation:
+    real_time_seconds: 5
+    short_term_minutes: 1
+    long_term_minutes: 15
+
+# Chart configurations
+charts:
+  # Resource utilization charts
+  resource_utilization:
+    enabled: true
+    time_range_hours: 1
+    refresh_interval: 10
+    metrics:
+      - "cpu_usage_percent"
+      - "memory_usage_percent" 
+      - "gpu_memory_usage_percent"
+      - "disk_usage_percent"
+    colors:
+      cpu_usage_percent: "#3498db"
+      memory_usage_percent: "#e74c3c"
+      gpu_memory_usage_percent: "#f39c12"
+      disk_usage_percent: "#27ae60"
+      
+  # Performance metrics charts
+  performance:
+    enabled: true
+    time_range_hours: 1
+    refresh_interval: 10
+    metrics:
+      - "inference_latency_ms"
+      - "inference_throughput"
+      - "model_accuracy"
+    colors:
+      inference_latency_ms: "#9b59b6"
+      inference_throughput: "#1abc9c"
+      model_accuracy: "#34495e"
+      
+  # Training progress charts
+  training:
+    enabled: true
+    time_range_hours: 24
+    refresh_interval: 30
+    metrics:
+      - "training_loss"
+      - "validation_loss"
+      - "learning_rate"
+    colors:
+      training_loss: "#e74c3c"
+      validation_loss: "#f39c12"
+      learning_rate: "#3498db"
+      
+  # System health overview
+  health_overview:
+    enabled: true
+    refresh_interval: 5
+    show_details: true
+    
+  # Alert timeline
+  alerts:
+    enabled: true
+    max_alerts_displayed: 20
+    refresh_interval: 5
+    severity_colors:
+      critical: "#e74c3c"
+      warning: "#f39c12" 
+      info: "#3498db"
+
+# Widget configurations
+widgets:
+  # Key metrics cards
+  metric_cards:
+    enabled: true
+    layout: "grid"  # "grid" or "horizontal"
+    cards:
+      - name: "System Health"
+        metric: "system_health_score"
+        format: "status"
+        thresholds:
+          healthy: 0.9
+          warning: 0.7
+          critical: 0.5
+          
+      - name: "Active Alerts"
+        metric: "active_alerts_count"
+        format: "number"
+        thresholds:
+          good: 0
+          warning: 5
+          critical: 10
+          
+      - name: "CPU Usage"
+        metric: "cpu_usage_percent"
+        format: "percentage"
+        thresholds:
+          good: 50
+          warning: 80
+          critical: 95
+          
+      - name: "Memory Usage"
+        metric: "memory_usage_percent"
+        format: "percentage"
+        thresholds:
+          good: 70
+          warning: 85
+          critical: 95
+          
+      - name: "GPU Memory"
+        metric: "gpu_memory_usage_percent"
+        format: "percentage"
+        thresholds:
+          good: 80
+          warning: 90
+          critical: 98
+          
+      - name: "Model Accuracy"
+        metric: "model_accuracy"
+        format: "percentage"
+        thresholds:
+          critical: 0.75
+          warning: 0.85
+          good: 0.90
+          
+  # Log viewer
+  log_viewer:
+    enabled: true
+    max_entries: 100
+    auto_scroll: true
+    filters:
+      - "error"
+      - "warning"
+      - "info"
+    search_enabled: true
+    
+  # Model status widget
+  model_status:
+    enabled: true
+    show_parameters: true
+    show_memory_usage: true
+    show_inference_stats: true
+
+# API endpoints configuration  
+api:
+  enabled: true
+  base_path: "/api"
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    
+  endpoints:
+    overview: "/overview"
+    metrics: "/metrics/{metric_name}"
+    training: "/training"
+    resources: "/resources"
+    performance: "/performance"
+    errors: "/errors"
+    alerts: "/alerts"
+    health: "/health"
+    dashboard_data: "/dashboard-data"
+    
+# Security settings
+security:
+  # Authentication (currently not implemented - for future use)
+  authentication:
+    enabled: false
+    type: "basic"  # "basic", "oauth", or "api_key"
+    
+  # CORS settings for web dashboard
+  cors:
+    enabled: true
+    allowed_origins: ["*"]
+    allowed_methods: ["GET", "POST"]
+    
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 1000
+    burst_size: 100
+
+# Theming and UI customization
+ui:
+  theme: "default"  # "default", "dark", or "light"
+  
+  # Color scheme
+  colors:
+    primary: "#2c3e50"
+    secondary: "#34495e"
+    success: "#27ae60"
+    warning: "#f39c12"
+    danger: "#e74c3c"
+    info: "#3498db"
+    
+  # Layout settings
+  layout:
+    sidebar_width: 250
+    header_height: 60
+    footer_enabled: true
+    
+  # Custom CSS (optional)
+  custom_css: ""
+  
+# Export settings
+export:
+  # Automatic report generation
+  reports:
+    enabled: false
+    schedule: "daily"  # "hourly", "daily", "weekly"
+    format: "json"  # "json", "csv", "html"
+    output_path: "/tmp/ghf_reports"
+    
+  # Manual export options
+  manual_export:
+    enabled: true
+    formats: ["json", "csv"]
+    max_time_range_hours: 168
