@@ -1,4 +1,4 @@
-"""Core HyperGNN model implementation."""
+"""Core HyperGNN model implementation with comprehensive error handling."""
 
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
@@ -9,6 +9,82 @@ import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer
 from torch_geometric.nn import GCNConv, GATConv, SAGEConv, MessagePassing
 from transformers import AutoModel, AutoTokenizer
+
+# Import enhanced error handling and logging (with fallbacks)
+try:
+    from ..utils.logging_utils import get_logger, LoggerMixin, log_function_call
+    from ..utils.exceptions import (
+        ValidationError, ModelError, GPUError, MemoryError, NetworkError, 
+        InferenceError, handle_cuda_out_of_memory, log_and_raise_error
+    )
+    from ..utils.memory_utils import (
+        check_gpu_memory_available, estimate_tensor_memory, safe_cuda_operation,
+        memory_management
+    )
+    ENHANCED_FEATURES = True
+except ImportError:
+    # Fallback implementations
+    def log_function_call(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    
+    def get_logger(name):
+        import logging
+        return logging.getLogger(name)
+    
+    class LoggerMixin:
+        def __init__(self, *args, **kwargs):
+            pass
+    
+    class ValidationError(Exception):
+        pass
+    
+    class ModelError(Exception):
+        pass
+    
+    class GPUError(Exception):
+        pass
+        
+    class MemoryError(Exception):
+        pass
+    
+    class NetworkError(Exception):
+        pass
+    
+    class InferenceError(Exception):
+        pass
+    
+    def handle_cuda_out_of_memory(func):
+        return func
+    
+    def log_and_raise_error(msg, exception_type=Exception):
+        raise exception_type(msg)
+    
+    def check_gpu_memory_available(min_gb=1):
+        return True
+    
+    def estimate_tensor_memory(shape, dtype=torch.float32):
+        return 0
+    
+    def safe_cuda_operation(func, *args, **kwargs):
+        # Check if func is a no-argument lambda (from existing code)
+        import inspect
+        sig = inspect.signature(func)
+        if len(sig.parameters) == 0:
+            return func()
+        else:
+            return func(*args, **kwargs)
+    
+    def memory_management(*args, **kwargs):
+        class DummyContext:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+        return DummyContext()
+    
+    ENHANCED_FEATURES = False
 
 # Import optimization utilities
 try:
@@ -21,9 +97,65 @@ except ImportError:
         return decorator
     AdaptiveDropout = nn.Dropout
 
+# Initialize logger
+logger = get_logger(__name__)
 
-class TextEncoder(nn.Module):
-    """Encodes text descriptions into embeddings."""
+
+def _validate_tensor_input(tensor: torch.Tensor, name: str, expected_dims: int, min_size: Optional[int] = None) -> None:
+    """Validate tensor input parameters.
+    
+    Args:
+        tensor: Input tensor to validate
+        name: Name of the tensor for error messages
+        expected_dims: Expected number of dimensions
+        min_size: Minimum size for the last dimension
+        
+    Raises:
+        ValidationError: If validation fails
+    """
+    if not isinstance(tensor, torch.Tensor):
+        raise ValidationError(name, type(tensor).__name__, "torch.Tensor")
+    
+    if tensor.dim() != expected_dims:
+        raise ValidationError(
+            f"{name}.dims", tensor.dim(), f"{expected_dims} dimensions"
+        )
+    
+    if min_size is not None and tensor.size(-1) < min_size:
+        raise ValidationError(
+            f"{name}.size(-1)", tensor.size(-1), f"at least {min_size}"
+        )
+    
+    if torch.isnan(tensor).any() or torch.isinf(tensor).any():
+        raise ValidationError(name, "contains NaN/Inf values", "finite values only")
+
+
+def _validate_text_input(texts: List[str], name: str = "texts") -> None:
+    """Validate text input parameters.
+    
+    Args:
+        texts: List of text strings to validate
+        name: Name for error messages
+        
+    Raises:
+        ValidationError: If validation fails
+    """
+    if not isinstance(texts, list):
+        raise ValidationError(name, type(texts).__name__, "list of strings")
+    
+    if len(texts) == 0:
+        raise ValidationError(name, "empty list", "non-empty list")
+    
+    for i, text in enumerate(texts):
+        if not isinstance(text, str):
+            raise ValidationError(f"{name}[{i}]", type(text).__name__, "string")
+        
+        if len(text.strip()) == 0:
+            raise ValidationError(f"{name}[{i}]", "empty string", "non-empty string")
+
+
+class TextEncoder(nn.Module, LoggerMixin):
+    """Encodes text descriptions into embeddings with comprehensive error handling."""
     
     def __init__(
         self,
@@ -31,40 +163,84 @@ class TextEncoder(nn.Module):
         embedding_dim: int = 384,
         freeze_encoder: bool = False,
     ):
-        """Initialize text encoder.
+        """Initialize text encoder with validation and error handling.
         
         Args:
             model_name: Pre-trained model name or path
             embedding_dim: Output embedding dimension
             freeze_encoder: Whether to freeze encoder weights
+            
+        Raises:
+            ValidationError: If parameters are invalid
+            NetworkError: If model cannot be loaded
+            ModelError: If encoder initialization fails
         """
         super().__init__()
+        
+        # Validate parameters
+        if not isinstance(model_name, str) or len(model_name.strip()) == 0:
+            raise ValidationError("model_name", model_name, "non-empty string")
+        
+        if not isinstance(embedding_dim, int) or embedding_dim <= 0:
+            raise ValidationError("embedding_dim", embedding_dim, "positive integer")
+        
+        if not isinstance(freeze_encoder, bool):
+            raise ValidationError("freeze_encoder", freeze_encoder, "boolean")
+        
+        # Initialize logger
+        if ENHANCED_FEATURES:
+            self.logger = get_logger(self.__class__.__name__)
+        else:
+            self.logger = get_logger(__name__)
+            
         self.model_name = model_name
         self.embedding_dim = embedding_dim
         self.freeze_encoder = freeze_encoder
         
-        # Initialize encoder based on model type
-        if "sentence-transformers" in model_name:
-            self.encoder = SentenceTransformer(model_name)
-            self.is_sentence_transformer = True
-            # Get actual embedding dimension
-            self.input_dim = self.encoder.get_sentence_embedding_dimension()
-        else:
-            # Use Hugging Face transformers
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.encoder = AutoModel.from_pretrained(model_name)
-            self.is_sentence_transformer = False
-            self.input_dim = self.encoder.config.hidden_size
+        self.logger.info(f"Initializing TextEncoder with model: {model_name}, dim: {embedding_dim}")
+        
+        # Initialize encoder based on model type with error handling
+        try:
+            if "sentence-transformers" in model_name:
+                self.logger.info(f"Loading SentenceTransformer model: {model_name}")
+                self.encoder = SentenceTransformer(model_name)
+                self.is_sentence_transformer = True
+                # Get actual embedding dimension
+                self.input_dim = self.encoder.get_sentence_embedding_dimension()
+                self.logger.info(f"SentenceTransformer loaded, input_dim: {self.input_dim}")
+            else:
+                # Use Hugging Face transformers
+                self.logger.info(f"Loading HuggingFace model: {model_name}")
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self.encoder = AutoModel.from_pretrained(model_name)
+                self.is_sentence_transformer = False
+                self.input_dim = self.encoder.config.hidden_size
+                self.logger.info(f"HuggingFace model loaded, input_dim: {self.input_dim}")
+                
+        except Exception as e:
+            error_msg = f"Failed to load text encoder model '{model_name}': {e}"
+            self.logger.error(error_msg)
+            if "network" in str(e).lower() or "connection" in str(e).lower() or "timeout" in str(e).lower():
+                raise NetworkError(model_name)
+            else:
+                raise ModelError("TextEncoder", "initialization", error_msg)
         
         # Projection layer if dimensions don't match
-        if self.input_dim != embedding_dim:
-            self.projection = nn.Linear(self.input_dim, embedding_dim)
-        else:
-            self.projection = nn.Identity()
-        
-        # Freeze encoder if requested
-        if freeze_encoder:
-            self._freeze_encoder()
+        try:
+            if self.input_dim != embedding_dim:
+                self.projection = nn.Linear(self.input_dim, embedding_dim)
+                self.logger.info(f"Created projection layer: {self.input_dim} -> {embedding_dim}")
+            else:
+                self.projection = nn.Identity()
+                self.logger.info("No projection layer needed (dimensions match)")
+            
+            # Freeze encoder if requested
+            if freeze_encoder:
+                self._freeze_encoder()
+                self.logger.info("Encoder weights frozen")
+                
+        except Exception as e:
+            raise ModelError("TextEncoder", "layer_creation", f"Failed to create projection layer: {e}")
     
     def _freeze_encoder(self):
         """Freeze encoder parameters."""
@@ -75,46 +251,84 @@ class TextEncoder(nn.Module):
             for param in self.encoder.parameters():
                 param.requires_grad = False
     
+    @log_function_call()
     def forward(self, texts: List[str]) -> torch.Tensor:
-        """Encode texts into embeddings.
+        """Encode texts into embeddings with comprehensive error handling.
         
         Args:
             texts: List of text descriptions
             
         Returns:
             Text embeddings [batch_size, embedding_dim]
+            
+        Raises:
+            ValidationError: If input texts are invalid
+            GPUError: If CUDA operation fails
+            ModelError: If encoding fails
         """
-        if self.is_sentence_transformer:
-            # Use sentence-transformers
-            if self.freeze_encoder:
-                with torch.no_grad():
+        # Validate input
+        _validate_text_input(texts, "texts")
+        
+        self.logger.debug(f"Encoding {len(texts)} texts")
+        
+        # Check GPU memory if using CUDA
+        if next(self.parameters()).is_cuda:
+            estimated_memory = estimate_tensor_memory((len(texts), self.embedding_dim))
+            check_gpu_memory_available(estimated_memory * 2, "text encoding")  # 2x for safety
+        
+        try:
+            if self.is_sentence_transformer:
+                # Use sentence-transformers
+                if self.freeze_encoder:
+                    with torch.no_grad():
+                        embeddings = self.encoder.encode(
+                            texts, convert_to_tensor=True, show_progress_bar=False
+                        )
+                        # Clone to make it compatible with autograd
+                        embeddings = embeddings.clone().detach().requires_grad_(False)
+                else:
                     embeddings = self.encoder.encode(
                         texts, convert_to_tensor=True, show_progress_bar=False
                     )
-                    # Clone to make it compatible with autograd
-                    embeddings = embeddings.clone().detach().requires_grad_(False)
+                    # Ensure autograd compatibility
+                    if not embeddings.requires_grad:
+                        embeddings = embeddings.clone().requires_grad_(True)
             else:
-                embeddings = self.encoder.encode(
-                    texts, convert_to_tensor=True, show_progress_bar=False
+                # Use transformers
+                inputs = self.tokenizer(
+                    texts, return_tensors="pt", padding=True, truncation=True, max_length=512
                 )
-                # Ensure autograd compatibility
-                if not embeddings.requires_grad:
-                    embeddings = embeddings.clone().requires_grad_(True)
-        else:
-            # Use transformers
-            inputs = self.tokenizer(
-                texts, return_tensors="pt", padding=True, truncation=True, max_length=512
-            )
-            inputs = {k: v.to(next(self.encoder.parameters()).device) for k, v in inputs.items()}
+                inputs = {k: v.to(next(self.encoder.parameters()).device) for k, v in inputs.items()}
+                
+                with torch.no_grad() if self.freeze_encoder else torch.enable_grad():
+                    outputs = self.encoder(**inputs)
+                    # Use [CLS] token embedding
+                    embeddings = outputs.last_hidden_state[:, 0, :]
             
-            with torch.no_grad() if self.freeze_encoder else torch.enable_grad():
-                outputs = self.encoder(**inputs)
-                # Use [CLS] token embedding
-                embeddings = outputs.last_hidden_state[:, 0, :]
-        
-        # Apply projection
-        embeddings = self.projection(embeddings)
-        return embeddings
+            # Apply projection with error handling
+            embeddings = safe_cuda_operation(
+                lambda: self.projection(embeddings),
+                "projection layer forward pass"
+            )
+            
+            # Validate output
+            _validate_tensor_input(embeddings, "output_embeddings", 2)
+            
+            if embeddings.size(1) != self.embedding_dim:
+                raise ModelError(
+                    "TextEncoder", "forward",
+                    f"Output dimension mismatch: got {embeddings.size(1)}, expected {self.embedding_dim}"
+                )
+            
+            self.logger.debug(f"Successfully encoded texts to shape {embeddings.shape}")
+            return embeddings
+            
+        except torch.cuda.OutOfMemoryError as e:
+            raise handle_cuda_out_of_memory("text encoding")
+        except Exception as e:
+            error_msg = f"Text encoding failed: {e}"
+            self.logger.error(error_msg, exc_info=True)
+            raise ModelError("TextEncoder", "forward", error_msg)
 
 
 class HyperNetwork(nn.Module):
@@ -138,6 +352,13 @@ class HyperNetwork(nn.Module):
             dropout: Dropout probability
         """
         super().__init__()
+        
+        # Initialize logger
+        if ENHANCED_FEATURES:
+            self.logger = get_logger(self.__class__.__name__)
+        else:
+            self.logger = get_logger(__name__)
+            
         self.text_dim = text_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -214,7 +435,7 @@ class HyperNetwork(nn.Module):
                 layer_dims["lin_r"] = (in_dim or self.hidden_dim, out_dim or self.hidden_dim)
                 layer_dims["bias"] = (out_dim or self.hidden_dim,)
             else:
-                raise ValueError(f"Unsupported GNN type: {self.gnn_type}")
+                raise ValidationError("gnn_type", self.gnn_type, "GCN, GAT, or SAGE")
             
             weight_dims.append(layer_dims)
         
@@ -312,6 +533,13 @@ class DynamicGNN(nn.Module):
             dropout: Dropout probability
         """
         super().__init__()
+        
+        # Initialize logger
+        if ENHANCED_FEATURES:
+            self.logger = get_logger(self.__class__.__name__)
+        else:
+            self.logger = get_logger(__name__)
+            
         self.gnn_type = gnn_type.upper()
         self.dropout = dropout
     
@@ -342,7 +570,7 @@ class DynamicGNN(nn.Module):
             elif self.gnn_type == "SAGE":
                 current_x = self._sage_layer(current_x, edge_index, layer_weights)
             else:
-                raise ValueError(f"Unsupported GNN type: {self.gnn_type}")
+                raise ValidationError("gnn_type", self.gnn_type, "GCN, GAT, or SAGE")
             
             # Apply activation and dropout (except for last layer)
             if layer_idx < len(generated_weights) - 1:
@@ -460,8 +688,8 @@ class DynamicGNN(nn.Module):
         return out
 
 
-class HyperGNN(nn.Module):
-    """Main HyperGNN model that combines text encoder, hypernetwork, and dynamic GNN."""
+class HyperGNN(nn.Module, LoggerMixin):
+    """Main HyperGNN model with comprehensive error handling and validation."""
     
     def __init__(
         self,
@@ -474,7 +702,7 @@ class HyperGNN(nn.Module):
         enable_caching: bool = True,
         cache_size: int = 1000,
     ):
-        """Initialize HyperGNN model.
+        """Initialize HyperGNN model with comprehensive validation.
         
         Args:
             text_encoder: Text encoder model name
@@ -485,13 +713,56 @@ class HyperGNN(nn.Module):
             freeze_text_encoder: Whether to freeze text encoder
             enable_caching: Whether to enable weight caching
             cache_size: Maximum number of cached weight sets
+            
+        Raises:
+            ValidationError: If parameters are invalid
+            ModelError: If model initialization fails
+            NetworkError: If text encoder cannot be loaded
         """
         super().__init__()
+        
+        # Initialize logger from LoggerMixin
+        if ENHANCED_FEATURES:
+            self.logger = get_logger(self.__class__.__name__)
+        else:
+            self.logger = get_logger(__name__)
+        
+        # Validate all parameters
+        if not isinstance(text_encoder, str) or len(text_encoder.strip()) == 0:
+            raise ValidationError("text_encoder", text_encoder, "non-empty string")
+        
+        if not isinstance(gnn_backbone, str):
+            raise ValidationError("gnn_backbone", gnn_backbone, "string")
+        
+        if gnn_backbone.upper() not in ["GCN", "GAT", "SAGE"]:
+            raise ValidationError("gnn_backbone", gnn_backbone, "one of: GCN, GAT, SAGE")
+        
+        if not isinstance(hidden_dim, int) or hidden_dim <= 0:
+            raise ValidationError("hidden_dim", hidden_dim, "positive integer")
+        
+        if not isinstance(num_layers, int) or num_layers <= 0:
+            raise ValidationError("num_layers", num_layers, "positive integer")
+        
+        if not isinstance(dropout, (int, float)) or not (0.0 <= dropout <= 1.0):
+            raise ValidationError("dropout", dropout, "float between 0.0 and 1.0")
+        
+        if not isinstance(freeze_text_encoder, bool):
+            raise ValidationError("freeze_text_encoder", freeze_text_encoder, "boolean")
+        
+        if not isinstance(enable_caching, bool):
+            raise ValidationError("enable_caching", enable_caching, "boolean")
+        
+        if not isinstance(cache_size, int) or cache_size <= 0:
+            raise ValidationError("cache_size", cache_size, "positive integer")
+        
         self.text_encoder_name = text_encoder
         self.gnn_backbone = gnn_backbone
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         self.dropout = dropout
+        
+        self.logger.info(f"Initializing HyperGNN: encoder={text_encoder}, backbone={gnn_backbone}, "
+                        f"hidden_dim={hidden_dim}, num_layers={num_layers}")
         
         # Optimization features
         self.enable_caching = enable_caching
@@ -500,28 +771,42 @@ class HyperGNN(nn.Module):
         else:
             self.weight_cache = None
         
-        # Initialize components
-        self.text_encoder = TextEncoder(
-            model_name=text_encoder,
-            embedding_dim=hidden_dim,
-            freeze_encoder=freeze_text_encoder,
-        )
-        
-        self.hypernetwork = HyperNetwork(
-            text_dim=hidden_dim,
-            hidden_dim=hidden_dim,
-            num_layers=num_layers,
-            gnn_type=gnn_backbone,
-            dropout=dropout,
-        )
-        
-        self.dynamic_gnn = DynamicGNN(
-            gnn_type=gnn_backbone,
-            dropout=dropout,
-        )
+        # Initialize components with error handling
+        try:
+            self.logger.info("Initializing TextEncoder...")
+            self.text_encoder = TextEncoder(
+                model_name=text_encoder,
+                embedding_dim=hidden_dim,
+                freeze_encoder=freeze_text_encoder,
+            )
+            
+            self.logger.info("Initializing HyperNetwork...")
+            self.hypernetwork = HyperNetwork(
+                text_dim=hidden_dim,
+                hidden_dim=hidden_dim,
+                num_layers=num_layers,
+                gnn_type=gnn_backbone,
+                dropout=dropout,
+            )
+            
+            self.logger.info("Initializing DynamicGNN...")
+            self.dynamic_gnn = DynamicGNN(
+                gnn_type=gnn_backbone,
+                dropout=dropout,
+            )
+            
+            self.logger.info("HyperGNN initialization completed successfully")
+            
+        except Exception as e:
+            error_msg = f"Failed to initialize HyperGNN components: {e}"
+            self.logger.error(error_msg, exc_info=True)
+            if isinstance(e, (ValidationError, NetworkError, ModelError)):
+                raise
+            else:
+                raise ModelError("HyperGNN", "initialization", error_msg)
     
     @profile_function("generate_weights")
-    def generate_weights(self, node_texts: List[str]) -> List[Dict[str, torch.Tensor]]:
+    def generate_weights(self, node_texts: List[str], return_flat: bool = True) -> Union[List[Dict[str, torch.Tensor]], Dict[str, torch.Tensor]]:
         """Generate GNN weights from node texts with caching optimization.
         
         Args:
@@ -549,16 +834,29 @@ class HyperGNN(nn.Module):
             cached_weights = [{k: v.clone().detach() for k, v in layer.items()} for layer in weights]
             self.weight_cache.put(node_texts, input_dim, output_dim, cached_weights)
         
-        return weights
+        # Return format based on preference
+        if return_flat and len(weights) == 1:
+            # For single layer, return the layer dict directly
+            return weights[0]
+        elif return_flat:
+            # For multiple layers, create a flattened structure
+            flat_weights = {}
+            for i, layer in enumerate(weights):
+                for key, value in layer.items():
+                    flat_weights[f"layer_{i}_{key}"] = value
+            return flat_weights
+        else:
+            return weights
     
     @profile_function("hypergnn_forward")
+    @log_function_call()
     def forward(
         self,
         edge_index: torch.Tensor,
         node_features: torch.Tensor,
         node_texts: List[str],
     ) -> torch.Tensor:
-        """Forward pass of HyperGNN.
+        """Forward pass of HyperGNN with comprehensive validation and error handling.
         
         Args:
             edge_index: Edge connectivity [2, num_edges]
@@ -567,32 +865,138 @@ class HyperGNN(nn.Module):
             
         Returns:
             Node embeddings [num_nodes, output_dim]
+            
+        Raises:
+            ValidationError: If inputs are invalid
+            InferenceError: If inference fails
+            GPUError: If CUDA operation fails
         """
-        # Encode texts to get embeddings
-        text_embeddings = self.text_encoder(node_texts)
+        # Comprehensive input validation
+        _validate_tensor_input(edge_index, "edge_index", 2)
+        _validate_tensor_input(node_features, "node_features", 2)
+        _validate_text_input(node_texts, "node_texts")
         
-        # Generate GNN weights
-        input_dim = node_features.size(1)
-        output_dim = self.hidden_dim  # Can be made configurable
+        if edge_index.size(0) != 2:
+            raise ValidationError(
+                "edge_index.size(0)", edge_index.size(0), "2 (source and target nodes)"
+            )
         
-        generated_weights = self.hypernetwork(
-            text_embeddings, input_dim, output_dim
-        )
+        if len(node_texts) != node_features.size(0):
+            raise ValidationError(
+                "node_texts length", len(node_texts), 
+                f"match node_features.size(0)={node_features.size(0)}"
+            )
         
-        # Apply dynamic GNN
-        node_embeddings = self.dynamic_gnn(
-            node_features, edge_index, generated_weights
-        )
+        # Check edge indices are valid
+        if edge_index.numel() > 0:
+            max_edge_idx = edge_index.max().item()
+            if max_edge_idx >= node_features.size(0):
+                raise ValidationError(
+                    "edge_index", f"max index {max_edge_idx}", 
+                    f"less than num_nodes ({node_features.size(0)})"
+                )
         
-        return node_embeddings
+        # Check GPU memory requirements
+        if node_features.is_cuda:
+            estimated_memory = (
+                estimate_tensor_memory(node_features.shape) * 3 +  # features, embeddings, weights
+                estimate_tensor_memory((len(node_texts), self.hidden_dim)) * 2  # text embeddings
+            )
+            check_gpu_memory_available(estimated_memory, "HyperGNN forward pass")
+        
+        self.logger.debug(f"HyperGNN forward: {node_features.size(0)} nodes, {edge_index.size(1)} edges")
+        
+        try:
+            # Encode texts to get embeddings
+            text_embeddings = self.text_encoder(node_texts)
+            
+            # Generate GNN weights
+            input_dim = node_features.size(1)
+            output_dim = self.hidden_dim  # Can be made configurable
+            
+            generated_weights = self.hypernetwork(
+                text_embeddings, input_dim, output_dim
+            )
+            
+            # Apply dynamic GNN
+            node_embeddings = self.dynamic_gnn(
+                node_features, edge_index, generated_weights
+            )
+            
+            # Final validation
+            _validate_tensor_input(node_embeddings, "output_embeddings", 2)
+            
+            if node_embeddings.size(0) != node_features.size(0):
+                raise InferenceError(
+                    node_features.shape, "HyperGNN",
+                    f"Output node count mismatch: got {node_embeddings.size(0)}, expected {node_features.size(0)}"
+                )
+            
+            self.logger.debug(f"HyperGNN forward completed successfully, output shape: {node_embeddings.shape}")
+            return node_embeddings
+            
+        except torch.cuda.OutOfMemoryError:
+            raise handle_cuda_out_of_memory("HyperGNN forward pass")
+        except Exception as e:
+            if isinstance(e, (ValidationError, InferenceError, ModelError, GPUError)):
+                raise
+            error_msg = f"HyperGNN forward pass failed: {e}"
+            self.logger.error(error_msg, exc_info=True)
+            raise InferenceError(node_features.shape, "HyperGNN", error_msg)
     
+    def forward_with_weights(
+        self,
+        edge_index: torch.Tensor, 
+        node_features: torch.Tensor,
+        generated_weights: Union[Dict[str, torch.Tensor], List[Dict[str, torch.Tensor]]]
+    ) -> torch.Tensor:
+        """Forward pass using precomputed weights.
+        
+        Args:
+            edge_index: Edge connectivity [2, num_edges]  
+            node_features: Node features [num_nodes, feature_dim]
+            generated_weights: Precomputed GNN weights
+            
+        Returns:
+            Node embeddings [num_nodes, output_dim]
+        """
+        # Convert flat weights back to list format if needed
+        if isinstance(generated_weights, dict):
+            if any(key.startswith('layer_') for key in generated_weights.keys()):
+                # Convert flat format back to list format
+                layer_weights = []
+                layer_indices = set()
+                for key in generated_weights.keys():
+                    if key.startswith('layer_'):
+                        layer_idx = int(key.split('_')[1])
+                        layer_indices.add(layer_idx)
+                
+                for i in sorted(layer_indices):
+                    layer_dict = {}
+                    prefix = f"layer_{i}_"
+                    for key, value in generated_weights.items():
+                        if key.startswith(prefix):
+                            weight_name = key[len(prefix):]
+                            layer_dict[weight_name] = value
+                    if layer_dict:
+                        layer_weights.append(layer_dict)
+                
+                generated_weights = layer_weights
+            else:
+                # Single layer dict
+                generated_weights = [generated_weights]
+        
+        # Use DynamicGNN with precomputed weights
+        return self.dynamic_gnn(node_features, edge_index, generated_weights)
+    
+    @log_function_call()
     def predict(
         self,
         edge_index: torch.Tensor,
         node_features: torch.Tensor,
         node_texts: List[str],
     ) -> torch.Tensor:
-        """Prediction interface for inference.
+        """Prediction interface for inference with memory management.
         
         Args:
             edge_index: Edge connectivity [2, num_edges]
@@ -601,10 +1005,26 @@ class HyperGNN(nn.Module):
             
         Returns:
             Predictions [num_nodes, output_dim]
+            
+        Raises:
+            ValidationError: If inputs are invalid
+            InferenceError: If prediction fails
         """
-        self.eval()
-        with torch.no_grad():
-            return self.forward(edge_index, node_features, node_texts)
+        with memory_management(cleanup_on_exit=True):
+            self.eval()
+            self.logger.debug("Starting prediction in eval mode")
+            
+            try:
+                with torch.no_grad():
+                    result = self.forward(edge_index, node_features, node_texts)
+                    self.logger.debug("Prediction completed successfully")
+                    return result
+            except Exception as e:
+                error_msg = f"Prediction failed: {e}"
+                self.logger.error(error_msg, exc_info=True)
+                if isinstance(e, (ValidationError, InferenceError)):
+                    raise
+                raise InferenceError(node_features.shape, "HyperGNN.predict", error_msg)
     
     def get_config(self) -> Dict:
         """Get model configuration."""
@@ -618,5 +1038,28 @@ class HyperGNN(nn.Module):
     
     @classmethod
     def from_config(cls, config: Dict) -> "HyperGNN":
-        """Create model from configuration."""
-        return cls(**config)
+        """Create model from configuration with validation.
+        
+        Args:
+            config: Model configuration dictionary
+            
+        Returns:
+            HyperGNN instance
+            
+        Raises:
+            ValidationError: If configuration is invalid
+            ModelError: If model creation fails
+        """
+        if not isinstance(config, dict):
+            raise ValidationError("config", type(config).__name__, "dictionary")
+        
+        logger.info(f"Creating HyperGNN from config: {config}")
+        
+        try:
+            return cls(**config)
+        except Exception as e:
+            error_msg = f"Failed to create HyperGNN from config: {e}"
+            logger.error(error_msg, exc_info=True)
+            if isinstance(e, (ValidationError, ModelError, NetworkError)):
+                raise
+            raise ModelError("HyperGNN", "from_config", error_msg)

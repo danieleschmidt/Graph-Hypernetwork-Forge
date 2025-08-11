@@ -1,8 +1,591 @@
-# Monitoring and Observability
+# Monitoring and Observability Guide
+
+This guide covers the comprehensive monitoring and observability system for Graph Hypernetwork Forge, including health checks, metrics collection, alerting, and dashboard visualization.
 
 ## Overview
 
-Comprehensive monitoring setup for Graph Hypernetwork Forge, covering performance metrics, error tracking, and operational insights.
+The monitoring system provides:
+
+- **Health Checks**: Model, memory, GPU, and dependency health monitoring
+- **Metrics Collection**: Performance, resource utilization, and accuracy metrics
+- **Alerting System**: Configurable alerts with email, Slack, and webhook notifications
+- **Observability Dashboard**: Real-time monitoring with web and console interfaces
+- **Monitoring Server**: HTTP endpoints for integration with external monitoring systems
+
+## Quick Start
+
+### Basic Setup
+
+```python
+from graph_hypernetwork_forge.utils import (
+    setup_default_health_checks,
+    setup_metrics_collection,
+    setup_monitoring_dashboard
+)
+
+# Setup monitoring components
+health_registry = setup_default_health_checks()
+metrics_aggregator = setup_metrics_collection("/tmp/metrics.db")
+dashboard = setup_monitoring_dashboard(dashboard_type="web", port=8080)
+
+# Check system health
+health_summary = health_registry.get_health_summary()
+print(f"System health: {health_summary['overall_status']}")
+
+# Start dashboard
+dashboard.run()
+```
+
+### Using the Startup Script
+
+```bash
+# Start basic monitoring
+python scripts/start_monitoring.py --mode basic
+
+# Start web dashboard only
+python scripts/start_monitoring.py --mode dashboard --port 8080
+
+# Start monitoring server only  
+python scripts/start_monitoring.py --mode server --port 8000
+
+# Start console dashboard
+python scripts/start_monitoring.py --mode console
+
+# Start production monitoring
+python scripts/start_monitoring.py --mode production --config configs/monitoring
+```
+
+## Health Checks
+
+### Available Health Checks
+
+1. **Model Health Check**: Validates model loading and inference capability
+2. **Memory Health Check**: Monitors system and GPU memory usage
+3. **GPU Health Check**: Verifies GPU availability and functionality
+4. **Data Pipeline Health Check**: Tests data loading and processing
+5. **Dependencies Health Check**: Validates required packages and versions
+6. **External Services Health Check**: Monitors external API dependencies
+
+### Custom Health Checks
+
+```python
+from graph_hypernetwork_forge.utils.health_checks import BaseHealthCheck, HealthStatus
+
+class CustomHealthCheck(BaseHealthCheck):
+    def __init__(self):
+        super().__init__("custom_check", timeout=10.0, critical=True)
+        
+    def _execute(self):
+        # Your health check logic here
+        if some_condition:
+            return HealthStatus.HEALTHY, "All good", {"detail": "value"}
+        else:
+            return HealthStatus.UNHEALTHY, "Problem detected", {"error": "details"}
+
+# Register custom health check
+health_registry = get_health_registry()
+health_registry.register(CustomHealthCheck())
+```
+
+### Health Check Endpoints
+
+When using the monitoring server, health checks are available via HTTP:
+
+- `GET /health` - Basic health check
+- `GET /health/detailed` - Detailed health information
+- `GET /health/ready` - Readiness probe (for Kubernetes)
+- `GET /health/live` - Liveness probe (for Kubernetes)
+
+## Metrics Collection
+
+### Automatic Metrics
+
+The system automatically collects:
+
+- **System Resources**: CPU, memory, disk usage
+- **GPU Metrics**: Memory usage, utilization
+- **Model Performance**: Inference latency, throughput
+- **Training Progress**: Loss, accuracy, epoch times
+
+### Manual Metrics
+
+```python
+from graph_hypernetwork_forge.utils import get_metrics_aggregator
+
+metrics_aggregator = get_metrics_aggregator()
+
+# Record training metrics
+model_collector = metrics_aggregator.model_collector
+model_collector.record_training_metric("loss", 0.5, epoch=10, step=1000)
+model_collector.record_validation_metric("accuracy", 0.92, epoch=10)
+
+# Record performance metrics
+perf_collector = metrics_aggregator.performance_collector
+perf_collector.record_latency("inference", 150.0)  # ms
+perf_collector.record_throughput("batch_processing", 32)
+```
+
+### Metrics Storage
+
+Metrics are stored in SQLite by default but can be configured for other backends:
+
+```python
+# SQLite (default)
+setup_metrics_collection("/path/to/metrics.db")
+
+# In-memory (for testing)
+setup_metrics_collection(":memory:")
+```
+
+## Alerting System
+
+### Configuration
+
+Create `configs/monitoring/alerting.yml`:
+
+```yaml
+rules:
+  - name: "high_memory_usage"
+    condition: "memory_usage_percent"
+    severity: "warning"
+    threshold: 85.0
+    comparison: ">"
+    duration_minutes: 5
+    enabled: true
+    description: "System memory usage is high"
+    
+channels:
+  - name: "email_alerts"
+    type: "email"
+    enabled: true
+    severities: ["critical", "warning"]
+    config:
+      smtp_server: "smtp.gmail.com"
+      smtp_port: 587
+      username: "alerts@company.com"
+      password: "app-password"
+      from_email: "alerts@company.com"
+      recipients: ["team@company.com"]
+      
+  - name: "slack_alerts"
+    type: "slack"
+    enabled: true
+    severities: ["critical", "warning"]
+    config:
+      webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+      channel: "#ml-alerts"
+```
+
+### Programmatic Alerting
+
+```python
+from graph_hypernetwork_forge.utils.alerting import (
+    AlertRule, AlertSeverity, get_alert_manager
+)
+
+# Create alert rule
+rule = AlertRule(
+    name="custom_metric_alert",
+    condition="custom_metric",
+    severity=AlertSeverity.WARNING,
+    threshold=100.0,
+    comparison=">",
+    duration_minutes=5
+)
+
+# Add to alert manager
+alert_manager = get_alert_manager()
+alert_manager.add_rule(rule)
+
+# Evaluate metrics against rules
+alerts = alert_manager.evaluate_metric("custom_metric", 150.0)
+```
+
+### Alert Types
+
+- **Threshold Alerts**: Triggered when metrics cross thresholds
+- **Health-based Alerts**: Based on health check results
+- **Trend Alerts**: Detect patterns in metric changes
+- **Composite Alerts**: Combine multiple conditions
+
+## Dashboard and Visualization
+
+### Web Dashboard
+
+The web dashboard provides real-time monitoring with:
+
+- System overview with key metrics
+- Resource utilization charts
+- Training progress visualization
+- Performance metrics tracking
+- Alert timeline and logs
+
+```python
+from graph_hypernetwork_forge.utils import setup_monitoring_dashboard
+
+dashboard = setup_monitoring_dashboard(
+    dashboard_type="web",
+    host="0.0.0.0",
+    port=8080
+)
+
+dashboard.run()
+```
+
+### Console Dashboard
+
+For environments without web access:
+
+```python
+dashboard = setup_monitoring_dashboard(dashboard_type="console")
+dashboard.run()  # Updates every 5 seconds
+```
+
+### Dashboard Configuration
+
+Create `configs/monitoring/dashboard.yml`:
+
+```yaml
+dashboard:
+  type: "web"
+  web:
+    host: "0.0.0.0"
+    port: 8080
+    auto_refresh_interval: 5
+
+charts:
+  resource_utilization:
+    enabled: true
+    time_range_hours: 1
+    refresh_interval: 10
+    
+  performance:
+    enabled: true
+    metrics:
+      - "inference_latency_ms"
+      - "inference_throughput"
+      - "model_accuracy"
+```
+
+## Monitoring Server
+
+### HTTP Endpoints
+
+The monitoring server provides REST API endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `/health` | Basic health status |
+| `/health/detailed` | Comprehensive health info |
+| `/metrics` | Prometheus-compatible metrics |
+| `/metrics/<name>` | Specific metric timeseries |
+| `/alerts` | Current firing alerts |
+| `/dashboard/data` | Complete dashboard data |
+| `/training/status` | Training progress |
+| `/system/info` | System information |
+
+### Starting the Server
+
+```python
+from graph_hypernetwork_forge.utils import create_monitoring_server
+
+server = create_monitoring_server(host="0.0.0.0", port=8000)
+server.start()
+```
+
+Or use the command line:
+
+```bash
+python scripts/start_monitoring.py --mode server --port 8000
+```
+
+## Integration Examples
+
+### Training Loop Integration
+
+```python
+from graph_hypernetwork_forge.utils import (
+    get_metrics_aggregator, get_health_registry
+)
+
+def train_model_with_monitoring():
+    # Setup monitoring
+    metrics_aggregator = get_metrics_aggregator()
+    health_registry = get_health_registry()
+    
+    model_collector = metrics_aggregator.model_collector
+    
+    for epoch in range(num_epochs):
+        # Training step
+        train_loss = train_one_epoch(model, train_loader)
+        val_loss, val_acc = validate(model, val_loader)
+        
+        # Record metrics
+        model_collector.record_training_metric("loss", train_loss, epoch, step)
+        model_collector.record_validation_metric("loss", val_loss, epoch)
+        model_collector.record_validation_metric("accuracy", val_acc, epoch)
+        
+        # Periodic health checks
+        if epoch % 10 == 0:
+            health_summary = health_registry.get_health_summary()
+            if health_summary['overall_status'] != 'healthy':
+                logger.warning(f"Health issue detected: {health_summary}")
+```
+
+### Inference Server Integration
+
+```python
+def inference_with_monitoring(model, input_data):
+    metrics_aggregator = get_metrics_aggregator()
+    perf_collector = metrics_aggregator.performance_collector
+    
+    # Time inference
+    start_time = time.time()
+    result = model(input_data)
+    latency_ms = (time.time() - start_time) * 1000
+    
+    # Record metrics
+    perf_collector.record_latency("inference", latency_ms)
+    perf_collector.record_throughput("inference", len(input_data))
+    
+    return result
+```
+
+## Production Deployment
+
+### Docker Integration
+
+```dockerfile
+FROM python:3.9
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Copy application
+COPY . /app
+WORKDIR /app
+
+# Expose monitoring ports
+EXPOSE 8000 8080
+
+# Start monitoring
+CMD ["python", "scripts/start_monitoring.py", "--mode", "production", "--config", "configs/monitoring"]
+```
+
+### Kubernetes Configuration
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ghf-monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ghf-monitoring
+  template:
+    metadata:
+      labels:
+        app: ghf-monitoring
+    spec:
+      containers:
+      - name: monitoring
+        image: ghf:latest
+        ports:
+        - containerPort: 8000
+          name: monitoring
+        - containerPort: 8080
+          name: dashboard
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ghf-monitoring-service
+spec:
+  selector:
+    app: ghf-monitoring
+  ports:
+  - name: monitoring
+    port: 8000
+    targetPort: 8000
+  - name: dashboard
+    port: 8080
+    targetPort: 8080
+```
+
+### Environment Variables
+
+Configure monitoring through environment variables:
+
+```bash
+# Metrics storage
+export GHF_METRICS_DB_PATH="/data/metrics.db"
+
+# Alert configuration
+export GHF_ALERTING_CONFIG="/config/alerting.yml"
+
+# Server settings
+export GHF_MONITORING_HOST="0.0.0.0"
+export GHF_MONITORING_PORT="8000"
+
+# Dashboard settings
+export GHF_DASHBOARD_HOST="0.0.0.0"
+export GHF_DASHBOARD_PORT="8080"
+```
+
+## Configuration Reference
+
+### Health Check Configuration (`health-checks.yml`)
+
+```yaml
+health_checks:
+  api:
+    endpoint: "/health"
+    timeout: 5
+    interval: 30
+    retries: 3
+    
+  model_ready:
+    endpoint: "/health/model"
+    timeout: 10
+    interval: 60
+
+custom_checks:
+  gpu_availability:
+    command: "python -c 'import torch; print(torch.cuda.is_available())'"
+    expected_output: "True"
+    timeout: 10
+```
+
+### Alerting Configuration (`alerting.yml`)
+
+```yaml
+rules:
+  - name: "alert_name"
+    condition: "metric_name"
+    severity: "warning|critical|info"
+    threshold: 85.0
+    comparison: ">|<|>=|<=|==|!="
+    duration_minutes: 5
+    enabled: true
+    description: "Alert description"
+    tags:
+      service: "ghf"
+      
+channels:
+  - name: "channel_name"
+    type: "email|slack|webhook|console"
+    enabled: true
+    severities: ["critical", "warning"]
+    config:
+      # Channel-specific configuration
+```
+
+### Dashboard Configuration (`dashboard.yml`)
+
+```yaml
+dashboard:
+  type: "web|console"
+  web:
+    host: "0.0.0.0"
+    port: 8080
+    debug: false
+    
+data:
+  metrics_storage:
+    type: "sqlite"
+    path: "/path/to/metrics.db"
+    retention_hours: 168
+    
+charts:
+  resource_utilization:
+    enabled: true
+    time_range_hours: 1
+    metrics:
+      - "cpu_usage_percent"
+      - "memory_usage_percent"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Dashboard not accessible**: Check firewall settings and port binding
+2. **Metrics not collected**: Verify database permissions and disk space
+3. **Alerts not sent**: Check notification channel configuration
+4. **High resource usage**: Adjust collection intervals and retention policies
+
+### Debugging
+
+```python
+# Enable debug logging
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Check component status
+health_summary = health_registry.get_health_summary()
+print(f"Health checks: {health_summary}")
+
+# Verify metrics collection
+current_metrics = metrics_aggregator.resource_collector.get_current_resource_metrics()
+print(f"Current metrics: {current_metrics}")
+
+# Test alerting
+alert_summary = alert_manager.get_alert_summary()
+print(f"Alerts: {alert_summary}")
+```
+
+### Performance Optimization
+
+- **Reduce collection frequency** for non-critical metrics
+- **Limit retention period** for historical data
+- **Use external storage** for large-scale deployments
+- **Batch metric writes** to reduce I/O overhead
+
+## Best Practices
+
+1. **Start Simple**: Begin with basic monitoring and add complexity gradually
+2. **Monitor What Matters**: Focus on metrics that impact your specific use case
+3. **Set Appropriate Thresholds**: Avoid alert fatigue with well-tuned thresholds
+4. **Test Alerting**: Regularly test notification channels
+5. **Regular Review**: Periodically review and update monitoring configuration
+6. **Documentation**: Document custom health checks and alert procedures
+7. **Security**: Secure monitoring endpoints and credentials in production
+
+## API Reference
+
+For detailed API documentation of monitoring components, see:
+
+- [Health Checks API](../source/api_reference.rst#health-checks)
+- [Metrics Collection API](../source/api_reference.rst#metrics-collection)
+- [Alerting API](../source/api_reference.rst#alerting)
+- [Dashboard API](../source/api_reference.rst#dashboard)
+
+## Contributing
+
+To contribute to the monitoring system:
+
+1. Follow existing patterns for new health checks
+2. Add comprehensive tests for new components
+3. Update configuration schemas
+4. Document new features and examples
+5. Consider backward compatibility
+
+For more information, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Key Metrics
 

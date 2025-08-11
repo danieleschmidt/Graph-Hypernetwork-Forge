@@ -1,0 +1,242 @@
+# Alerting configuration for Graph Hypernetwork Forge
+# This file defines alert rules and notification channels
+
+# Alert Rules
+rules:
+  # Critical system alerts
+  - name: "high_memory_usage"
+    condition: "memory_usage_percent"
+    severity: "warning"
+    threshold: 85.0
+    comparison: ">"
+    duration_minutes: 5
+    enabled: true
+    description: "System memory usage is critically high"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "system"
+      
+  - name: "critical_memory_usage"
+    condition: "memory_usage_percent"
+    severity: "critical"
+    threshold: 95.0
+    comparison: ">"
+    duration_minutes: 2
+    enabled: true
+    description: "System memory usage is at critical levels"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "system"
+      
+  - name: "high_cpu_usage"
+    condition: "cpu_usage_percent"
+    severity: "warning"
+    threshold: 80.0
+    comparison: ">"
+    duration_minutes: 10
+    enabled: true
+    description: "CPU usage is consistently high"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "system"
+      
+  - name: "gpu_memory_high"
+    condition: "gpu_memory_usage_percent"
+    severity: "warning"
+    threshold: 90.0
+    comparison: ">"
+    duration_minutes: 5
+    enabled: true
+    description: "GPU memory usage is high"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "gpu"
+      
+  - name: "gpu_memory_critical"
+    condition: "gpu_memory_usage_percent"
+    severity: "critical"
+    threshold: 98.0
+    comparison: ">"
+    duration_minutes: 2
+    enabled: true
+    description: "GPU memory usage is critical - may cause OOM errors"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "gpu"
+      
+  # Model performance alerts
+  - name: "high_inference_latency"
+    condition: "inference_latency_ms"
+    severity: "warning"
+    threshold: 1000.0
+    comparison: ">"
+    duration_minutes: 5
+    enabled: true
+    description: "Model inference latency is high"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "performance"
+      
+  - name: "very_high_inference_latency"
+    condition: "inference_latency_ms"
+    severity: "critical"
+    threshold: 5000.0
+    comparison: ">"
+    duration_minutes: 2
+    enabled: true
+    description: "Model inference latency is critically high"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "performance"
+      
+  - name: "low_model_accuracy"
+    condition: "model_accuracy"
+    severity: "warning"
+    threshold: 0.85
+    comparison: "<"
+    duration_minutes: 10
+    enabled: true
+    description: "Model accuracy has dropped below acceptable threshold"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "model"
+      
+  - name: "very_low_model_accuracy"
+    condition: "model_accuracy"
+    severity: "critical"
+    threshold: 0.75
+    comparison: "<"
+    duration_minutes: 5
+    enabled: true
+    description: "Model accuracy is critically low"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "model"
+      
+  - name: "low_throughput"
+    condition: "inference_throughput"
+    severity: "warning"
+    threshold: 10.0
+    comparison: "<"
+    duration_minutes: 10
+    enabled: true
+    description: "Model throughput is low"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "performance"
+      
+  # Training alerts
+  - name: "training_loss_not_decreasing"
+    condition: "training_loss"
+    severity: "warning"
+    threshold: 0.01
+    comparison: "<"
+    duration_minutes: 30
+    enabled: true
+    description: "Training loss is not decreasing (potential training issues)"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "training"
+      
+  - name: "validation_loss_increasing"
+    condition: "validation_loss"
+    severity: "warning"
+    threshold: 0.05
+    comparison: ">"
+    duration_minutes: 20
+    enabled: true
+    description: "Validation loss is increasing (potential overfitting)"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "training"
+      
+  # Disk and storage alerts
+  - name: "low_disk_space"
+    condition: "disk_usage_percent"
+    severity: "warning"
+    threshold: 80.0
+    comparison: ">"
+    duration_minutes: 5
+    enabled: true
+    description: "Disk space is running low"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "storage"
+      
+  - name: "critical_disk_space"
+    condition: "disk_usage_percent"
+    severity: "critical"
+    threshold: 90.0
+    comparison: ">"
+    duration_minutes: 2
+    enabled: true
+    description: "Disk space is critically low"
+    tags:
+      service: "graph-hypernetwork-forge"
+      category: "storage"
+
+# Notification Channels
+channels:
+  # Email notifications
+  - name: "email_alerts"
+    type: "email"
+    enabled: false  # Set to true and configure SMTP settings to enable
+    severities: ["critical", "warning"]
+    config:
+      smtp_server: "smtp.gmail.com"
+      smtp_port: 587
+      username: "your-email@gmail.com"
+      password: "your-app-password"  # Use app password for Gmail
+      from_email: "your-email@gmail.com"
+      recipients:
+        - "admin@yourcompany.com"
+        - "devops@yourcompany.com"
+      use_tls: true
+      
+  # Webhook notifications (for integration with other systems)
+  - name: "webhook_alerts"
+    type: "webhook"
+    enabled: false  # Set to true and configure webhook URL to enable
+    severities: ["critical", "warning", "info"]
+    config:
+      webhook_url: "https://your-webhook-endpoint.com/alerts"
+      headers:
+        "Content-Type": "application/json"
+        "Authorization": "Bearer your-token"
+      timeout: 10
+      
+  # Slack notifications
+  - name: "slack_alerts"
+    type: "slack"
+    enabled: false  # Set to true and configure Slack webhook to enable
+    severities: ["critical", "warning"]
+    config:
+      webhook_url: "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+      channel: "#alerts"
+      
+  # Console logging (always enabled for development)
+  - name: "console_alerts"
+    type: "console"
+    enabled: true
+    severities: ["critical", "warning", "info"]
+    config: {}
+
+# Global settings
+settings:
+  # Alert evaluation interval
+  evaluation_interval_seconds: 30
+  
+  # Alert history retention
+  history_retention_hours: 168  # 7 days
+  
+  # Alert suppression settings
+  default_suppression_minutes: 60
+  max_suppression_minutes: 1440  # 24 hours
+  
+  # Rate limiting
+  max_alerts_per_hour: 100
+  
+  # Alert grouping
+  group_by: ["service", "category"]
+  group_wait_seconds: 10
+  group_interval_seconds: 300
