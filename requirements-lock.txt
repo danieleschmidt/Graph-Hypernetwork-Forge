@@ -16,4 +16,4 @@ setuptools==80.9.0
 six==1.17.0
 unattended-upgrades==0.1
 wadllib==1.3.6
-wheel==0.42.0
+wheel==0.45.1
