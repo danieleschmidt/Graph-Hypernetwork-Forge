@@ -1,3 +1,4 @@
+```
 # Locked security dependencies for Graph Hypernetwork Forge
 # Generated from pyproject.toml [project.optional-dependencies.security]
 # Install with: pip install -r requirements-security-lock.txt
@@ -5,9 +6,10 @@
 # Security scanning tools
 bandit[toml]==1.8.6
 safety==3.6.0
-semgrep==1.50.0
+semgrep==1.131.0
 
 # Additional security tools for enhanced scanning
 pip-audit==2.6.1
 cyclonedx-bom==4.0.4
 detect-secrets==1.5.0
+```
