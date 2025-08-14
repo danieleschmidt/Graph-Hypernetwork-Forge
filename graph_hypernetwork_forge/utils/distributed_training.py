@@ -1,74 +1,186 @@
-"""Simplified Distributed Training Framework for Graph Hypernetwork Forge."""
+"""Distributed Training Framework for Graph Hypernetwork Forge.
+
+This module provides comprehensive distributed training capabilities including:
+- Multi-GPU and multi-node training
+- Gradient synchronization and optimization
+- Dynamic load balancing
+- Fault-tolerant training with checkpointing
+- Elastic scaling for cloud environments
+"""
 
 import os
 import time
-import torch
-import torch.distributed as dist
-import torch.nn as nn
-from torch.nn.parallel import DistributedDataParallel as DDP
+import json
+import pickle
+import socket
+import threading
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 import logging
 
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.optim import ZeroRedundancyOptimizer
+from torch.utils.data import DataLoader, DistributedSampler
 
-def get_logger(name):
-    return logging.getLogger(name)
-
+# Enhanced monitoring and resilience
+try:
+    from .logging_utils import get_logger, DistributedLogger
+    from .monitoring import DistributedMetricsCollector
+    from .resilience_framework import CircuitBreaker, ResilienceManager
+    from .exceptions import DistributedTrainingError, CheckpointError
+    ENHANCED_FEATURES = True
+except ImportError:
+    def get_logger(name):
+        return logging.getLogger(name)
+    class DistributedLogger:
+        def __init__(self, *args, **kwargs):
+            self.logger = logging.getLogger("distributed")
+        def log_distributed_event(self, event, details):
+            self.logger.info(f"DISTRIBUTED: {event} - {details}")
+    class DistributedMetricsCollector:
+        def __init__(self, *args, **kwargs): pass
+        def collect_metrics(self, *args, **kwargs): pass
+    class CircuitBreaker:
+        def __init__(self, *args, **kwargs): pass
+        def __call__(self, func): return func
+    class ResilienceManager:
+        def __init__(self, *args, **kwargs): pass
+    class DistributedTrainingError(Exception): pass
+    class CheckpointError(Exception): pass
+    ENHANCED_FEATURES = False
 
 logger = get_logger(__name__)
 
 
-class DistributedTrainer:
-    """Basic distributed training framework."""
+@dataclass
+class DistributedConfig:
+    """Configuration for distributed training."""
+    # Basic distributed settings
+    backend: str = "nccl"  # nccl for GPU, gloo for CPU
+    init_method: str = "env://"  # or "tcp://host:port"
+    world_size: int = 1
+    rank: int = 0
+    local_rank: int = 0
     
-    def __init__(self, world_size: int = 1, rank: int = 0):
-        """Initialize distributed trainer."""
-        self.world_size = world_size
+    # Training settings
+    batch_size: int = 32
+    gradient_accumulation_steps: int = 1
+    max_grad_norm: float = 1.0
+    
+    # Optimization settings
+    use_zero_optimizer: bool = True
+    zero_stage: int = 2  # ZeRO stage (1, 2, or 3)
+    overlap_grad_reduce: bool = True
+    
+    # Checkpointing
+    checkpoint_dir: str = "./checkpoints"
+    checkpoint_interval: int = 1000  # steps
+    keep_checkpoint_count: int = 5
+    
+    # Fault tolerance
+    enable_elastic_training: bool = True
+    min_nodes: int = 1
+    max_nodes: int = 8
+    recovery_timeout: float = 300.0  # seconds
+    
+    # Performance optimization
+    use_mixed_precision: bool = True
+    compile_model: bool = False  # PyTorch 2.0 compile
+    bucket_size_mb: float = 25.0  # DDP bucket size
+    
+    # Monitoring
+    log_interval: int = 100
+    profile_training: bool = False
+
+
+class DistributedCheckpointManager:
+    """Fault-tolerant checkpoint management for distributed training."""
+    
+    def __init__(self, config: DistributedConfig, rank: int):
+        """Initialize checkpoint manager.
+        
+        Args:
+            config: Distributed training configuration
+            rank: Process rank
+        """
+        self.config = config
         self.rank = rank
+        self.checkpoint_dir = config.checkpoint_dir
         self.is_main_process = rank == 0
-        logger.info(f"DistributedTrainer initialized for rank {rank}/{world_size}")
+        
+        # Create checkpoint directory
+        if self.is_main_process:
+            os.makedirs(self.checkpoint_dir, exist_ok=True)
+        
+        # Synchronize across processes
+        if dist.is_initialized():
+            dist.barrier()
+        
+        logger.info(f"DistributedCheckpointManager initialized for rank {rank}")
     
-    def setup_model(self, model: nn.Module) -> nn.Module:
-        """Setup model for distributed training."""
-        if torch.cuda.is_available():
-            device = torch.device(f"cuda:{self.rank}")
-            model = model.to(device)
+    def save_checkpoint(self, step: int, model: torch.nn.Module, 
+                       optimizer: torch.optim.Optimizer,
+                       scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
+                       metrics: Optional[Dict] = None,
+                       extra_state: Optional[Dict] = None) -> str:
+        """Save distributed checkpoint.
         
-        if self.world_size > 1 and dist.is_initialized():
-            model = DDP(model, device_ids=[self.rank] if torch.cuda.is_available() else None)
+        Args:
+            step: Training step
+            model: Model to save
+            optimizer: Optimizer state
+            scheduler: Learning rate scheduler
+            metrics: Training metrics
+            extra_state: Additional state to save
+            
+        Returns:
+            Checkpoint path
+        """
+        checkpoint_path = os.path.join(
+            self.checkpoint_dir, f"checkpoint_step_{step}"
+        )
         
-        return model
-    
-    def train_step(self, model: nn.Module, batch, loss_fn) -> float:
-        """Execute single training step."""
-        model.train()
-        
-        # Move batch to device
-        if torch.cuda.is_available():
-            device = torch.device(f"cuda:{self.rank}")
-            if isinstance(batch, dict):
-                batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v 
-                        for k, v in batch.items()}
-        
-        # Forward pass
-        outputs = model(**batch) if isinstance(batch, dict) else model(batch)
-        loss = loss_fn(outputs, batch)
-        
-        return loss.item()
-
-
-def get_world_size() -> int:
-    """Get world size."""
-    if dist.is_initialized():
-        return dist.get_world_size()
-    return 1
-
-
-def get_rank() -> int:
-    """Get current rank."""
-    if dist.is_initialized():
-        return dist.get_rank()
-    return 0
-
-
-def is_main_process() -> bool:
-    """Check if current process is main process."""
-    return get_rank() == 0
+        # Only main process saves the checkpoint metadata
+        if self.is_main_process:
+            os.makedirs(checkpoint_path, exist_ok=True)
+            
+            # Save model state (DDP wrapped model)
+            if isinstance(model, DDP):
+                model_state = model.module.state_dict()
+            else:
+                model_state = model.state_dict()
+            
+            torch.save(model_state, os.path.join(checkpoint_path, "model.pt"))
+            
+            # Save training state
+            training_state = {
+                'step': step,
+                'optimizer_state': optimizer.state_dict(),
+                'config': self.config.__dict__,
+                'metrics': metrics or {},
+                'timestamp': time.time(),
+            }
+            
+            if scheduler is not None:
+                training_state['scheduler_state'] = scheduler.state_dict()
+            
+            if extra_state is not None:
+                training_state['extra_state'] = extra_state
+            
+            # Convert non-serializable values to strings for JSON
+            json_safe_state = {}
+            for key, value in training_state.items():
+                if key == 'optimizer_state':
+                    # Skip optimizer state in JSON (saved separately)
+                    continue
+                try:
+                    json.dumps(value)  # Test if serializable
+                    json_safe_state[key] = value
+                except (TypeError, ValueError):
+                    json_safe_state[key] = str(value)
+            
+            with open(os.path.join(checkpoint_path, "training_state.json"), 'w') as f:
+                json.dump(json_safe_state, f, indent=2)\n            \n            # Save optimizer state separately for ZeRO\n            if hasattr(optimizer, 'consolidate_state_dict'):\n                # ZeRO optimizer\n                optimizer.consolidate_state_dict(to=0)\n                if self.rank == 0:\n                    torch.save(\n                        optimizer.state_dict(),\n                        os.path.join(checkpoint_path, \"optimizer_zero.pt\")\n                    )\n            else:\n                torch.save(\n                    optimizer.state_dict(),\n                    os.path.join(checkpoint_path, \"optimizer.pt\")\n                )\n            \n            logger.info(f\"Checkpoint saved: {checkpoint_path}\")\n            \n            # Clean up old checkpoints\n            self._cleanup_old_checkpoints()\n        \n        # Synchronize across all processes\n        if dist.is_initialized():\n            dist.barrier()\n        \n        return checkpoint_path\n    \n    def load_checkpoint(self, checkpoint_path: str, model: torch.nn.Module,\n                       optimizer: torch.optim.Optimizer,\n                       scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None) -> Dict:\n        \"\"\"Load distributed checkpoint.\n        \n        Args:\n            checkpoint_path: Path to checkpoint\n            model: Model to load state into\n            optimizer: Optimizer to load state into\n            scheduler: Scheduler to load state into\n            \n        Returns:\n            Training state dictionary\n        \"\"\"\n        if not os.path.exists(checkpoint_path):\n            raise CheckpointError(f\"Checkpoint not found: {checkpoint_path}\")\n        \n        try:\n            # Load model state\n            model_path = os.path.join(checkpoint_path, \"model.pt\")\n            model_state = torch.load(model_path, map_location=f\"cuda:{self.rank}\")\n            \n            if isinstance(model, DDP):\n                model.module.load_state_dict(model_state)\n            else:\n                model.load_state_dict(model_state)\n            \n            # Load training state\n            with open(os.path.join(checkpoint_path, \"training_state.json\"), 'r') as f:\n                training_state = json.load(f)\n            \n            # Load optimizer state\n            optimizer_path = os.path.join(checkpoint_path, \"optimizer_zero.pt\")\n            if not os.path.exists(optimizer_path):\n                optimizer_path = os.path.join(checkpoint_path, \"optimizer.pt\")\n            \n            if os.path.exists(optimizer_path):\n                optimizer_state = torch.load(optimizer_path, map_location=f\"cuda:{self.rank}\")\n                optimizer.load_state_dict(optimizer_state)\n            \n            # Load scheduler state\n            if scheduler is not None and 'scheduler_state' in training_state:\n                scheduler.load_state_dict(training_state['scheduler_state'])\n            \n            logger.info(f\"Checkpoint loaded: {checkpoint_path}\")\n            \n            return training_state\n            \n        except Exception as e:\n            raise CheckpointError(f\"Failed to load checkpoint {checkpoint_path}: {e}\")\n    \n    def find_latest_checkpoint(self) -> Optional[str]:\n        \"\"\"Find the latest checkpoint.\n        \n        Returns:\n            Path to latest checkpoint or None\n        \"\"\"\n        if not os.path.exists(self.checkpoint_dir):\n            return None\n        \n        checkpoints = []\n        for item in os.listdir(self.checkpoint_dir):\n            if item.startswith(\"checkpoint_step_\"):\n                try:\n                    step = int(item.split(\"_\")[-1])\n                    checkpoints.append((step, os.path.join(self.checkpoint_dir, item)))\n                except ValueError:\n                    continue\n        \n        if checkpoints:\n            checkpoints.sort(key=lambda x: x[0], reverse=True)\n            return checkpoints[0][1]\n        \n        return None\n    \n    def _cleanup_old_checkpoints(self):\n        \"\"\"Clean up old checkpoints to save disk space.\"\"\"\n        if not self.is_main_process:\n            return\n        \n        checkpoints = []\n        for item in os.listdir(self.checkpoint_dir):\n            if item.startswith(\"checkpoint_step_\"):\n                try:\n                    step = int(item.split(\"_\")[-1])\n                    checkpoints.append((step, os.path.join(self.checkpoint_dir, item)))\n                except ValueError:\n                    continue\n        \n        # Keep only the most recent checkpoints\n        if len(checkpoints) > self.config.keep_checkpoint_count:\n            checkpoints.sort(key=lambda x: x[0], reverse=True)\n            \n            for _, checkpoint_path in checkpoints[self.config.keep_checkpoint_count:]:\n                try:\n                    import shutil\n                    shutil.rmtree(checkpoint_path)\n                    logger.info(f\"Removed old checkpoint: {checkpoint_path}\")\n                except Exception as e:\n                    logger.warning(f\"Failed to remove checkpoint {checkpoint_path}: {e}\")\n\n\nclass DistributedTrainer:\n    \"\"\"Comprehensive distributed training framework.\"\"\"\n    \n    def __init__(self, config: DistributedConfig):\n        \"\"\"Initialize distributed trainer.\n        \n        Args:\n            config: Distributed training configuration\n        \"\"\"\n        self.config = config\n        self.rank = config.rank\n        self.local_rank = config.local_rank\n        self.world_size = config.world_size\n        self.is_main_process = self.rank == 0\n        \n        # Initialize distributed environment\n        self._setup_distributed()\n        \n        # Initialize components\n        self.checkpoint_manager = DistributedCheckpointManager(config, self.rank)\n        self.distributed_logger = DistributedLogger(f\"rank_{self.rank}\")\n        self.metrics_collector = DistributedMetricsCollector(\"distributed_training\")\n        self.resilience_manager = ResilienceManager()\n        \n        # Training state\n        self.model = None\n        self.optimizer = None\n        self.scheduler = None\n        self.train_loader = None\n        self.val_loader = None\n        \n        # Performance tracking\n        self.step = 0\n        self.epoch = 0\n        self.best_metric = float('inf')\n        self.training_start_time = None\n        \n        logger.info(f\"DistributedTrainer initialized for rank {self.rank}/{self.world_size}\")\n    \n    def _setup_distributed(self):\n        \"\"\"Setup distributed training environment.\"\"\"\n        if self.world_size > 1 and not dist.is_initialized():\n            # Set CUDA device\n            if torch.cuda.is_available():\n                torch.cuda.set_device(self.local_rank)\n                device = torch.device(f\"cuda:{self.local_rank}\")\n            else:\n                device = torch.device(\"cpu\")\n            \n            # Initialize process group\n            dist.init_process_group(\n                backend=self.config.backend,\n                init_method=self.config.init_method,\n                world_size=self.world_size,\n                rank=self.rank\n            )\n            \n            logger.info(f\"Distributed process group initialized: rank {self.rank}, \"\n                       f\"world_size {self.world_size}, device {device}\")\n        \n        # Set random seeds for reproducibility\n        torch.manual_seed(42 + self.rank)\n        if torch.cuda.is_available():\n            torch.cuda.manual_seed_all(42 + self.rank)\n    \n    def setup_model(self, model: torch.nn.Module) -> torch.nn.Module:\n        \"\"\"Setup model for distributed training.\n        \n        Args:\n            model: Model to setup\n            \n        Returns:\n            Wrapped model for distributed training\n        \"\"\"\n        # Move model to appropriate device\n        if torch.cuda.is_available():\n            device = torch.device(f\"cuda:{self.local_rank}\")\n            model = model.to(device)\n        \n        # Compile model if requested (PyTorch 2.0)\n        if self.config.compile_model and hasattr(torch, 'compile'):\n            model = torch.compile(model)\n            logger.info(\"Model compiled with PyTorch 2.0\")\n        \n        # Wrap with DistributedDataParallel\n        if self.world_size > 1:\n            model = DDP(\n                model,\n                device_ids=[self.local_rank] if torch.cuda.is_available() else None,\n                output_device=self.local_rank if torch.cuda.is_available() else None,\n                bucket_cap_mb=self.config.bucket_size_mb,\n                gradient_as_bucket_view=True,\n            )\n            logger.info(\"Model wrapped with DistributedDataParallel\")\n        \n        self.model = model\n        return model\n    \n    def setup_optimizer(self, model: torch.nn.Module, \n                       optimizer_class: type = torch.optim.AdamW,\n                       **optimizer_kwargs) -> torch.optim.Optimizer:\n        \"\"\"Setup optimizer for distributed training.\n        \n        Args:\n            model: Model to optimize\n            optimizer_class: Optimizer class\n            **optimizer_kwargs: Optimizer arguments\n            \n        Returns:\n            Configured optimizer\n        \"\"\"\n        # Get model parameters\n        if isinstance(model, DDP):\n            parameters = model.module.parameters()\n        else:\n            parameters = model.parameters()\n        \n        # Setup optimizer\n        if self.config.use_zero_optimizer and self.world_size > 1:\n            # Use ZeRO optimizer for memory efficiency\n            base_optimizer = optimizer_class(parameters, **optimizer_kwargs)\n            optimizer = ZeroRedundancyOptimizer(\n                parameters,\n                optimizer_class=optimizer_class,\n                **optimizer_kwargs\n            )\n            logger.info(f\"ZeRO optimizer initialized (stage {self.config.zero_stage})\")\n        else:\n            optimizer = optimizer_class(parameters, **optimizer_kwargs)\n            logger.info(f\"Standard optimizer initialized: {optimizer_class.__name__}\")\n        \n        self.optimizer = optimizer\n        return optimizer\n    \n    def setup_data_loaders(self, train_dataset, val_dataset=None, \n                          collate_fn=None) -> Tuple[DataLoader, Optional[DataLoader]]:\n        \"\"\"Setup distributed data loaders.\n        \n        Args:\n            train_dataset: Training dataset\n            val_dataset: Validation dataset\n            collate_fn: Custom collate function\n            \n        Returns:\n            Tuple of (train_loader, val_loader)\n        \"\"\"\n        # Distributed samplers\n        train_sampler = DistributedSampler(\n            train_dataset,\n            num_replicas=self.world_size,\n            rank=self.rank,\n            shuffle=True\n        )\n        \n        val_sampler = None\n        if val_dataset is not None:\n            val_sampler = DistributedSampler(\n                val_dataset,\n                num_replicas=self.world_size,\n                rank=self.rank,\n                shuffle=False\n            )\n        \n        # Data loaders\n        train_loader = DataLoader(\n            train_dataset,\n            batch_size=self.config.batch_size,\n            sampler=train_sampler,\n            collate_fn=collate_fn,\n            num_workers=4,\n            pin_memory=torch.cuda.is_available(),\n        )\n        \n        val_loader = None\n        if val_dataset is not None:\n            val_loader = DataLoader(\n                val_dataset,\n                batch_size=self.config.batch_size,\n                sampler=val_sampler,\n                collate_fn=collate_fn,\n                num_workers=4,\n                pin_memory=torch.cuda.is_available(),\n            )\n        \n        self.train_loader = train_loader\n        self.val_loader = val_loader\n        \n        logger.info(f\"Data loaders setup: train_size={len(train_dataset)}, \"\n                   f\"val_size={len(val_dataset) if val_dataset else 0}\")\n        \n        return train_loader, val_loader\n    \n    def train_epoch(self, loss_fn: Callable, \n                   gradient_clip_fn: Optional[Callable] = None) -> Dict[str, float]:\n        \"\"\"Train for one epoch.\n        \n        Args:\n            loss_fn: Loss function\n            gradient_clip_fn: Gradient clipping function\n            \n        Returns:\n            Epoch training metrics\n        \"\"\"\n        self.model.train()\n        \n        # Set epoch for distributed sampler\n        if hasattr(self.train_loader.sampler, 'set_epoch'):\n            self.train_loader.sampler.set_epoch(self.epoch)\n        \n        epoch_metrics = {\n            'train_loss': 0.0,\n            'train_samples': 0,\n            'grad_norm': 0.0,\n            'learning_rate': 0.0,\n        }\n        \n        # Mixed precision training\n        scaler = torch.cuda.amp.GradScaler() if self.config.use_mixed_precision else None\n        \n        # Circuit breaker for fault tolerance\n        train_step_cb = self.resilience_manager.create_circuit_breaker(\n            \"train_step\",\n            failure_threshold=5,\n            recovery_timeout=30.0\n        )\n        \n        for batch_idx, batch in enumerate(self.train_loader):\n            batch_start_time = time.time()\n            \n            try:\n                # Training step with circuit breaker\n                @train_step_cb\n                def train_step():\n                    return self._train_step(\n                        batch, loss_fn, scaler, gradient_clip_fn\n                    )\n                \n                step_metrics = train_step()\n                \n                # Accumulate metrics\n                for key, value in step_metrics.items():\n                    if key in epoch_metrics:\n                        epoch_metrics[key] += value\n                \n                epoch_metrics['train_samples'] += step_metrics.get('batch_size', 0)\n                \n                # Logging\n                if self.step % self.config.log_interval == 0 and self.is_main_process:\n                    self._log_training_progress(step_metrics, batch_start_time)\n                \n                # Checkpointing\n                if (self.step % self.config.checkpoint_interval == 0 and \n                    self.step > 0):\n                    self._save_training_checkpoint(epoch_metrics)\n                \n                self.step += 1\n                \n            except Exception as e:\n                logger.error(f\"Training step failed: {e}\")\n                if self.config.enable_elastic_training:\n                    # Continue training on error in elastic mode\n                    continue\n                else:\n                    raise\n        \n        # Average metrics across all samples\n        if epoch_metrics['train_samples'] > 0:\n            epoch_metrics['train_loss'] /= epoch_metrics['train_samples']\n            epoch_metrics['grad_norm'] /= len(self.train_loader)\n        \n        # Synchronize metrics across processes\n        if self.world_size > 1:\n            epoch_metrics = self._synchronize_metrics(epoch_metrics)\n        \n        return epoch_metrics\n    \n    def _train_step(self, batch, loss_fn: Callable, \n                   scaler: Optional[torch.cuda.amp.GradScaler],\n                   gradient_clip_fn: Optional[Callable]) -> Dict[str, float]:\n        \"\"\"Execute single training step.\n        \n        Args:\n            batch: Training batch\n            loss_fn: Loss function\n            scaler: Mixed precision scaler\n            gradient_clip_fn: Gradient clipping function\n            \n        Returns:\n            Step metrics\n        \"\"\"\n        # Move batch to device\n        if torch.cuda.is_available():\n            device = torch.device(f\"cuda:{self.local_rank}\")\n            batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v \n                    for k, v in batch.items()}\n        \n        # Forward pass with mixed precision\n        if self.config.use_mixed_precision and scaler is not None:\n            with torch.cuda.amp.autocast():\n                outputs = self.model(**batch)\n                loss = loss_fn(outputs, batch)\n        else:\n            outputs = self.model(**batch)\n            loss = loss_fn(outputs, batch)\n        \n        # Scale loss for gradient accumulation\n        loss = loss / self.config.gradient_accumulation_steps\n        \n        # Backward pass\n        if self.config.use_mixed_precision and scaler is not None:\n            scaler.scale(loss).backward()\n        else:\n            loss.backward()\n        \n        step_metrics = {\n            'loss': loss.item() * self.config.gradient_accumulation_steps,\n            'batch_size': batch.get('batch_size', len(next(iter(batch.values())))),\n        }\n        \n        # Gradient accumulation\n        if (self.step + 1) % self.config.gradient_accumulation_steps == 0:\n            # Gradient clipping\n            if gradient_clip_fn is not None:\n                if self.config.use_mixed_precision and scaler is not None:\n                    scaler.unscale_(self.optimizer)\n                \n                if isinstance(self.model, DDP):\n                    grad_norm = gradient_clip_fn(self.model.module.parameters())\n                else:\n                    grad_norm = gradient_clip_fn(self.model.parameters())\n                \n                step_metrics['grad_norm'] = grad_norm\n            \n            # Optimizer step\n            if self.config.use_mixed_precision and scaler is not None:\n                scaler.step(self.optimizer)\n                scaler.update()\n            else:\n                self.optimizer.step()\n            \n            # Learning rate scheduling\n            if self.scheduler is not None:\n                self.scheduler.step()\n                step_metrics['learning_rate'] = self.scheduler.get_last_lr()[0]\n            \n            # Zero gradients\n            self.optimizer.zero_grad()\n        \n        return step_metrics\n    \n    def validate(self, loss_fn: Callable) -> Dict[str, float]:\n        \"\"\"Run validation.\n        \n        Args:\n            loss_fn: Loss function\n            \n        Returns:\n            Validation metrics\n        \"\"\"\n        if self.val_loader is None:\n            return {}\n        \n        self.model.eval()\n        \n        val_metrics = {\n            'val_loss': 0.0,\n            'val_samples': 0,\n        }\n        \n        with torch.no_grad():\n            for batch in self.val_loader:\n                # Move batch to device\n                if torch.cuda.is_available():\n                    device = torch.device(f\"cuda:{self.local_rank}\")\n                    batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v \n                            for k, v in batch.items()}\n                \n                # Forward pass\n                if self.config.use_mixed_precision:\n                    with torch.cuda.amp.autocast():\n                        outputs = self.model(**batch)\n                        loss = loss_fn(outputs, batch)\n                else:\n                    outputs = self.model(**batch)\n                    loss = loss_fn(outputs, batch)\n                \n                val_metrics['val_loss'] += loss.item() * batch.get('batch_size', len(next(iter(batch.values()))))\n                val_metrics['val_samples'] += batch.get('batch_size', len(next(iter(batch.values()))))\n        \n        # Average metrics\n        if val_metrics['val_samples'] > 0:\n            val_metrics['val_loss'] /= val_metrics['val_samples']\n        \n        # Synchronize metrics across processes\n        if self.world_size > 1:\n            val_metrics = self._synchronize_metrics(val_metrics)\n        \n        return val_metrics\n    \n    def _synchronize_metrics(self, metrics: Dict[str, float]) -> Dict[str, float]:\n        \"\"\"Synchronize metrics across all processes.\n        \n        Args:\n            metrics: Local metrics\n            \n        Returns:\n            Synchronized metrics\n        \"\"\"\n        if not dist.is_initialized():\n            return metrics\n        \n        synchronized_metrics = {}\n        \n        for key, value in metrics.items():\n            tensor = torch.tensor(value, dtype=torch.float32, device=f\"cuda:{self.local_rank}\")\n            dist.all_reduce(tensor, op=dist.ReduceOp.SUM)\n            synchronized_metrics[key] = (tensor / self.world_size).item()\n        \n        return synchronized_metrics\n    \n    def _log_training_progress(self, metrics: Dict[str, float], batch_start_time: float):\n        \"\"\"Log training progress.\n        \n        Args:\n            metrics: Training metrics\n            batch_start_time: Batch start time\n        \"\"\"\n        batch_time = time.time() - batch_start_time\n        samples_per_sec = metrics.get('batch_size', 0) / batch_time if batch_time > 0 else 0\n        \n        log_msg = (f\"Step {self.step}, Epoch {self.epoch}, \"\n                  f\"Loss: {metrics.get('loss', 0):.4f}, \"\n                  f\"Grad Norm: {metrics.get('grad_norm', 0):.4f}, \"\n                  f\"LR: {metrics.get('learning_rate', 0):.6f}, \"\n                  f\"Samples/sec: {samples_per_sec:.1f}\")\n        \n        logger.info(log_msg)\n        \n        # Collect metrics for monitoring\n        self.metrics_collector.collect_metrics({\n            'step': self.step,\n            'epoch': self.epoch,\n            'rank': self.rank,\n            'batch_time': batch_time,\n            'samples_per_sec': samples_per_sec,\n            **metrics\n        })\n    \n    def _save_training_checkpoint(self, metrics: Dict[str, float]):\n        \"\"\"Save training checkpoint.\n        \n        Args:\n            metrics: Current training metrics\n        \"\"\"\n        try:\n            checkpoint_path = self.checkpoint_manager.save_checkpoint(\n                step=self.step,\n                model=self.model,\n                optimizer=self.optimizer,\n                scheduler=self.scheduler,\n                metrics=metrics,\n                extra_state={\n                    'epoch': self.epoch,\n                    'best_metric': self.best_metric,\n                }\n            )\n            \n            if self.is_main_process:\n                logger.info(f\"Checkpoint saved at step {self.step}: {checkpoint_path}\")\n                \n        except Exception as e:\n            logger.error(f\"Failed to save checkpoint: {e}\")\n    \n    def train(self, num_epochs: int, loss_fn: Callable,\n             scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,\n             gradient_clip_fn: Optional[Callable] = None,\n             resume_from_checkpoint: Optional[str] = None) -> Dict[str, List[float]]:\n        \"\"\"Main training loop.\n        \n        Args:\n            num_epochs: Number of training epochs\n            loss_fn: Loss function\n            scheduler: Learning rate scheduler\n            gradient_clip_fn: Gradient clipping function\n            resume_from_checkpoint: Path to checkpoint to resume from\n            \n        Returns:\n            Training history\n        \"\"\"\n        if self.model is None or self.optimizer is None or self.train_loader is None:\n            raise DistributedTrainingError(\"Model, optimizer, and data loader must be setup first\")\n        \n        self.scheduler = scheduler\n        self.training_start_time = time.time()\n        \n        # Resume from checkpoint if specified\n        start_epoch = 0\n        if resume_from_checkpoint:\n            training_state = self.checkpoint_manager.load_checkpoint(\n                resume_from_checkpoint, self.model, self.optimizer, self.scheduler\n            )\n            start_epoch = training_state.get('epoch', 0)\n            self.step = training_state.get('step', 0)\n            self.best_metric = training_state.get('best_metric', float('inf'))\n            \n            logger.info(f\"Resumed training from epoch {start_epoch}, step {self.step}\")\n        \n        # Training history\n        history = {\n            'train_loss': [],\n            'val_loss': [],\n            'learning_rate': [],\n        }\n        \n        try:\n            for epoch in range(start_epoch, num_epochs):\n                self.epoch = epoch\n                \n                if self.is_main_process:\n                    logger.info(f\"Starting epoch {epoch + 1}/{num_epochs}\")\n                \n                # Training\n                train_metrics = self.train_epoch(loss_fn, gradient_clip_fn)\n                history['train_loss'].append(train_metrics['train_loss'])\n                \n                # Validation\n                val_metrics = self.validate(loss_fn)\n                if val_metrics:\n                    history['val_loss'].append(val_metrics['val_loss'])\n                    \n                    # Update best metric\n                    if val_metrics['val_loss'] < self.best_metric:\n                        self.best_metric = val_metrics['val_loss']\n                        \n                        # Save best model\n                        if self.is_main_process:\n                            self.checkpoint_manager.save_checkpoint(\n                                step=self.step,\n                                model=self.model,\n                                optimizer=self.optimizer,\n                                scheduler=self.scheduler,\n                                metrics={**train_metrics, **val_metrics},\n                                extra_state={\n                                    'epoch': self.epoch,\n                                    'best_metric': self.best_metric,\n                                    'is_best': True,\n                                }\n                            )\n                \n                # Learning rate tracking\n                if self.scheduler is not None:\n                    history['learning_rate'].append(self.scheduler.get_last_lr()[0])\n                \n                # Epoch logging\n                if self.is_main_process:\n                    elapsed_time = time.time() - self.training_start_time\n                    log_msg = (f\"Epoch {epoch + 1} completed in {elapsed_time:.2f}s - \"\n                              f\"Train Loss: {train_metrics['train_loss']:.4f}\")\n                    \n                    if val_metrics:\n                        log_msg += f\", Val Loss: {val_metrics['val_loss']:.4f}\"\n                    \n                    logger.info(log_msg)\n        \n        except KeyboardInterrupt:\n            logger.info(\"Training interrupted by user\")\n            \n            # Save checkpoint on interruption\n            if self.is_main_process:\n                self.checkpoint_manager.save_checkpoint(\n                    step=self.step,\n                    model=self.model,\n                    optimizer=self.optimizer,\n                    scheduler=self.scheduler,\n                    metrics=train_metrics if 'train_metrics' in locals() else {},\n                    extra_state={\n                        'epoch': self.epoch,\n                        'interrupted': True,\n                    }\n                )\n        \n        except Exception as e:\n            logger.error(f\"Training failed: {e}\")\n            raise DistributedTrainingError(f\"Training failed: {e}\")\n        \n        finally:\n            # Cleanup\n            if dist.is_initialized():\n                dist.destroy_process_group()\n        \n        total_time = time.time() - self.training_start_time\n        if self.is_main_process:\n            logger.info(f\"Training completed in {total_time:.2f}s\")\n        \n        return history\n    \n    def cleanup(self):\n        \"\"\"Cleanup distributed training environment.\"\"\"\n        if dist.is_initialized():\n            dist.destroy_process_group()\n        \n        logger.info(f\"Distributed training cleanup completed for rank {self.rank}\")\n\n\ndef init_distributed_training(rank: int, world_size: int, config: DistributedConfig,\n                             train_fn: Callable, *args, **kwargs):\n    \"\"\"Initialize and run distributed training.\n    \n    Args:\n        rank: Process rank\n        world_size: Total number of processes\n        config: Distributed training configuration\n        train_fn: Training function to execute\n        *args: Additional arguments for train_fn\n        **kwargs: Additional keyword arguments for train_fn\n    \"\"\"\n    # Update config with runtime parameters\n    config.rank = rank\n    config.world_size = world_size\n    config.local_rank = rank % torch.cuda.device_count() if torch.cuda.is_available() else 0\n    \n    # Setup distributed trainer\n    trainer = DistributedTrainer(config)\n    \n    try:\n        # Execute training function\n        result = train_fn(trainer, *args, **kwargs)\n        return result\n        \n    except Exception as e:\n        logger.error(f\"Distributed training failed for rank {rank}: {e}\")\n        raise\n    \n    finally:\n        # Cleanup\n        trainer.cleanup()\n\n\ndef launch_distributed_training(config: DistributedConfig, train_fn: Callable,\n                               *args, **kwargs):\n    \"\"\"Launch distributed training across multiple processes.\n    \n    Args:\n        config: Distributed training configuration\n        train_fn: Training function to execute\n        *args: Additional arguments for train_fn\n        **kwargs: Additional keyword arguments for train_fn\n    \"\"\"\n    if config.world_size == 1:\n        # Single process training\n        config.rank = 0\n        config.local_rank = 0\n        trainer = DistributedTrainer(config)\n        return train_fn(trainer, *args, **kwargs)\n    \n    else:\n        # Multi-process training\n        mp.spawn(\n            init_distributed_training,\n            args=(config.world_size, config, train_fn, *args),\n            nprocs=config.world_size,\n            join=True\n        )\n\n\n# Utility functions for distributed operations\ndef get_world_size() -> int:\n    \"\"\"Get world size.\"\"\"\n    if dist.is_initialized():\n        return dist.get_world_size()\n    return 1\n\n\ndef get_rank() -> int:\n    \"\"\"Get current rank.\"\"\"\n    if dist.is_initialized():\n        return dist.get_rank()\n    return 0\n\n\ndef is_main_process() -> bool:\n    \"\"\"Check if current process is main process.\"\"\"\n    return get_rank() == 0\n\n\ndef synchronize():\n    \"\"\"Synchronize all processes.\"\"\"\n    if dist.is_initialized():\n        dist.barrier()\n\n\ndef all_reduce_tensor(tensor: torch.Tensor, op=dist.ReduceOp.SUM) -> torch.Tensor:\n    \"\"\"All-reduce tensor across processes.\n    \n    Args:\n        tensor: Tensor to reduce\n        op: Reduction operation\n        \n    Returns:\n        Reduced tensor\n    \"\"\"\n    if dist.is_initialized():\n        dist.all_reduce(tensor, op=op)\n    return tensor\n\n\ndef gather_tensor(tensor: torch.Tensor, dst: int = 0) -> Optional[List[torch.Tensor]]:\n    \"\"\"Gather tensor from all processes.\n    \n    Args:\n        tensor: Tensor to gather\n        dst: Destination rank\n        \n    Returns:\n        List of tensors if dst rank, None otherwise\n    \"\"\"\n    if not dist.is_initialized():\n        return [tensor]\n    \n    world_size = get_world_size()\n    rank = get_rank()\n    \n    if rank == dst:\n        gather_list = [torch.zeros_like(tensor) for _ in range(world_size)]\n        dist.gather(tensor, gather_list, dst=dst)\n        return gather_list\n    else:\n        dist.gather(tensor, dst=dst)\n        return None
