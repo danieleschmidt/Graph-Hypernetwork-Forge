@@ -1,0 +1,181 @@
+{
+  "timestamp": 1755518061.1894968,
+  "total_gates": 7,
+  "passed_gates": 3,
+  "failed_gates": 4,
+  "overall_score": 7.495815693610318,
+  "passed": false,
+  "metadata": {
+    "validation_time": 0.17337799072265625,
+    "project_root": "/root/repo",
+    "config": {
+      "code_quality": {
+        "enabled": true,
+        "min_score": 8.0,
+        "tools": [
+          "flake8",
+          "black",
+          "isort",
+          "mypy"
+        ]
+      },
+      "test_coverage": {
+        "enabled": true,
+        "min_coverage": 85.0,
+        "exclude_patterns": [
+          "*/tests/*",
+          "*/test_*.py"
+        ]
+      },
+      "security_scan": {
+        "enabled": true,
+        "max_high_severity": 0,
+        "max_medium_severity": 5,
+        "tools": [
+          "bandit",
+          "safety"
+        ]
+      },
+      "performance_benchmarks": {
+        "enabled": true,
+        "max_response_time_ms": 200,
+        "min_throughput_rps": 100
+      },
+      "dependency_check": {
+        "enabled": true,
+        "check_vulnerabilities": true,
+        "check_licenses": true,
+        "allowed_licenses": [
+          "MIT",
+          "Apache-2.0",
+          "BSD-3-Clause"
+        ]
+      },
+      "documentation": {
+        "enabled": true,
+        "min_docstring_coverage": 80.0,
+        "check_readme": true
+      },
+      "build_validation": {
+        "enabled": true,
+        "check_imports": true,
+        "check_setup": true
+      }
+    }
+  },
+  "gate_results": [
+    {
+      "gate_name": "code_quality",
+      "passed": false,
+      "score": 5.0,
+      "threshold": 8.0,
+      "details": {
+        "flake8": {
+          "error": "[Errno 2] No such file or directory: 'flake8'"
+        },
+        "black": {
+          "error": "[Errno 2] No such file or directory: 'black'"
+        }
+      },
+      "error_message": "Flake8 check failed: [Errno 2] No such file or directory: 'flake8'; Black check failed: [Errno 2] No such file or directory: 'black'",
+      "execution_time": 0.005533695220947266
+    },
+    {
+      "gate_name": "test_coverage",
+      "passed": false,
+      "score": 0.0,
+      "threshold": 85.0,
+      "details": {
+        "total_coverage": 0.0,
+        "estimated": true,
+        "test_output": ""
+      },
+      "error_message": null,
+      "execution_time": 0.034394264221191406
+    },
+    {
+      "gate_name": "security_scan",
+      "passed": false,
+      "score": 10.0,
+      "threshold": 8.0,
+      "details": {
+        "bandit": {
+          "error": "[Errno 2] No such file or directory: 'bandit'"
+        },
+        "safety": {
+          "error": "[Errno 2] No such file or directory: 'safety'"
+        }
+      },
+      "error_message": "Bandit scan failed: [Errno 2] No such file or directory: 'bandit'; Safety check failed: [Errno 2] No such file or directory: 'safety'",
+      "execution_time": 0.0018656253814697266
+    },
+    {
+      "gate_name": "performance_benchmarks",
+      "passed": true,
+      "score": 10.0,
+      "threshold": 7.0,
+      "details": {
+        "performance_metrics": {
+          "response_time_ms": 150,
+          "throughput_rps": 100,
+          "memory_usage_mb": 200
+        },
+        "response_time_ok": true,
+        "throughput_ok": true,
+        "benchmarks_run": true
+      },
+      "error_message": null,
+      "execution_time": 0.04175209999084473
+    },
+    {
+      "gate_name": "dependency_check",
+      "passed": true,
+      "score": 10.0,
+      "threshold": 8.0,
+      "details": {
+        "requirements.txt": {
+          "total_requirements": 11,
+          "unpinned_requirements": 0,
+          "unpinned_list": []
+        }
+      },
+      "error_message": null,
+      "execution_time": 0.0004658699035644531
+    },
+    {
+      "gate_name": "documentation",
+      "passed": true,
+      "score": 9.470709855272226,
+      "threshold": 7.0,
+      "details": {
+        "readme_exists": true,
+        "docs_directory_exists": true,
+        "docstring_coverage": 82.35699517574086,
+        "total_functions": 1451,
+        "documented_functions": 1195
+      },
+      "error_message": null,
+      "execution_time": 0.048716068267822266
+    },
+    {
+      "gate_name": "build_validation",
+      "passed": false,
+      "score": 8.0,
+      "threshold": 8.0,
+      "details": {
+        "setup_files_exist": true,
+        "import_test": {
+          "successful": false,
+          "output": "",
+          "error": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/root/repo/graph_hypernetwork_forge/__init__.py\", line 10, in <module>\n    from .models import HyperGNN\n  File \"/root/repo/graph_hypernetwork_forge/models/__init__.py\", line 1, in <module>\n    from .hypergnn import HyperGNN\n  File \"/root/repo/graph_hypernetwork_forge/models/hypergnn.py\", line 6, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
+        },
+        "package_structure": {
+          "package_dir_exists": true,
+          "init_file_exists": true
+        }
+      },
+      "error_message": "Import test failed: Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/root/repo/graph_hypernetwork_forge/__init__.py\", line 10, in <module>\n    from .models import HyperGNN\n  File \"/root/repo/graph_hypernetwork_forge/models/__init__.py\", line 1, in <module>\n    from .hypergnn import HyperGNN\n  File \"/root/repo/graph_hypernetwork_forge/models/hypergnn.py\", line 6, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
+      "execution_time": 0.04039788246154785
+    }
+  ]
+}
