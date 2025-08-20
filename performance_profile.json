@@ -1,0 +1,63 @@
+{
+  "timestamp": "2025-08-20 03:12:55",
+  "performance_report": {
+    "system_resources": {
+      "status": "healthy",
+      "cpu_percent_avg": 50.0,
+      "memory_percent_current": 60.0,
+      "memory_available_gb": 4.0,
+      "process_count": 1
+    },
+    "cache_performance": {
+      "items": 50,
+      "size_mb": 0.01,
+      "max_size_mb": 409.6,
+      "utilization": 0.0
+    },
+    "optimization_stats": {
+      "total_operations": 1,
+      "cache_hits": 0,
+      "cache_misses": 50,
+      "avg_processing_time": 0.47400474548339844,
+      "peak_memory_usage": 60.0,
+      "total_graphs_processed": 50
+    },
+    "batch_processing": {
+      "current_batch_size": 4,
+      "avg_throughput": 106.11,
+      "recent_operations": 1
+    },
+    "configuration": {
+      "max_workers": 2,
+      "batch_size_per_worker": 16,
+      "memory_limit_gb": 8.0,
+      "gpu_memory_fraction": 0.8,
+      "enable_distributed": false,
+      "enable_model_parallel": false,
+      "enable_gradient_accumulation": true,
+      "accumulation_steps": 4,
+      "prefetch_factor": 2,
+      "num_workers": 2,
+      "pin_memory": true
+    },
+    "recommendations": [
+      "\ud83d\udfe1 Low cache utilization - verify caching is beneficial for workload",
+      "\ud83d\udfe1 Low cache hit rate - verify data has reusable patterns"
+    ]
+  },
+  "batch_history": [
+    {
+      "batch_size": 4,
+      "data_size": 50,
+      "elapsed_time": 0.4712188243865967,
+      "throughput": 106.10781533417492,
+      "worker_count": 4
+    }
+  ],
+  "system_info": {
+    "cpu_count": 2,
+    "memory_total_gb": 8.0,
+    "python_version": "3.12.3 (main, Jun 18 2025, 17:59:45) [GCC 13.3.0]",
+    "platform": "linux"
+  }
+}

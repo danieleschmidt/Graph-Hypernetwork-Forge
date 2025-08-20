@@ -1,0 +1,140 @@
+{
+  "metadata": {
+    "timestamp": 1755659149.0159228,
+    "repo_path": "/root/repo",
+    "python_version": "3.12.3 (main, Jun 18 2025, 17:59:45) [GCC 13.3.0]",
+    "platform": "linux"
+  },
+  "results": [
+    {
+      "name": "Repository Structure",
+      "passed": true,
+      "message": "All 7 required files present",
+      "details": {
+        "files_checked": 7
+      },
+      "timestamp": 1755659148.595498
+    },
+    {
+      "name": "Python Syntax",
+      "passed": true,
+      "message": "All 87 Python files have valid syntax",
+      "details": {
+        "files_checked": 87
+      },
+      "timestamp": 1755659148.9333873
+    },
+    {
+      "name": "Import Check",
+      "passed": true,
+      "message": "All 5 critical imports successful",
+      "details": {
+        "critical_imports": [
+          {
+            "module": "json",
+            "status": "success",
+            "description": "JSON processing"
+          },
+          {
+            "module": "os",
+            "status": "success",
+            "description": "Operating system interface"
+          },
+          {
+            "module": "sys",
+            "status": "success",
+            "description": "System-specific parameters"
+          },
+          {
+            "module": "pathlib",
+            "status": "success",
+            "description": "Path handling"
+          },
+          {
+            "module": "typing",
+            "status": "success",
+            "description": "Type hints"
+          }
+        ],
+        "optional_status": [
+          {
+            "module": "torch",
+            "status": "missing",
+            "description": "PyTorch deep learning"
+          },
+          {
+            "module": "transformers",
+            "status": "missing",
+            "description": "Hugging Face transformers"
+          },
+          {
+            "module": "sentence_transformers",
+            "status": "missing",
+            "description": "Sentence embeddings"
+          },
+          {
+            "module": "torch_geometric",
+            "status": "missing",
+            "description": "Graph neural networks"
+          }
+        ]
+      },
+      "timestamp": 1755659148.9338386
+    },
+    {
+      "name": "Configuration Files",
+      "passed": true,
+      "message": "All configuration files are valid",
+      "details": {
+        "checks": [
+          {
+            "file": "pyproject.toml",
+            "status": "valid",
+            "sections": [
+              "build-system",
+              "project",
+              "tool"
+            ]
+          },
+          {
+            "file": "requirements.txt",
+            "status": "valid",
+            "requirement_count": 11
+          }
+        ]
+      },
+      "timestamp": 1755659148.9401677
+    },
+    {
+      "name": "Demo Functionality",
+      "passed": true,
+      "message": "Demo script executed successfully",
+      "details": {
+        "exit_code": 0,
+        "output_lines": 91,
+        "contains_success": true
+      },
+      "timestamp": 1755659149.0022845
+    },
+    {
+      "name": "Security Basics",
+      "passed": true,
+      "message": "Basic security check passed with 2 good practices",
+      "details": {
+        "issues": [],
+        "good_practices": [
+          {
+            "check": "executable_permissions",
+            "status": "good",
+            "files": 1
+          },
+          {
+            "check": "gitignore_present",
+            "status": "good"
+          }
+        ]
+      },
+      "timestamp": 1755659149.0158365
+    }
+  ]
+}
