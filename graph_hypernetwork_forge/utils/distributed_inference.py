@@ -542,7 +542,7 @@ class DistributedInferenceEngine:
         
         return results
     
-    def _infer_batch_local(self, requests: List[InferenceRequest]) -> List[InferenceResult:
+    def _infer_batch_local(self, requests: List[InferenceRequest]) -> List[InferenceResult]:
         """Process batch locally in single thread."""
         model = self.model_factory()
         results = []
