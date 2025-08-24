@@ -1,181 +1,380 @@
 {
-  "timestamp": 1755518061.1894968,
-  "total_gates": 7,
-  "passed_gates": 3,
-  "failed_gates": 4,
-  "overall_score": 7.495815693610318,
-  "passed": false,
-  "metadata": {
-    "validation_time": 0.17337799072265625,
-    "project_root": "/root/repo",
-    "config": {
-      "code_quality": {
-        "enabled": true,
-        "min_score": 8.0,
-        "tools": [
-          "flake8",
-          "black",
-          "isort",
-          "mypy"
-        ]
-      },
-      "test_coverage": {
-        "enabled": true,
-        "min_coverage": 85.0,
-        "exclude_patterns": [
-          "*/tests/*",
-          "*/test_*.py"
-        ]
-      },
-      "security_scan": {
-        "enabled": true,
-        "max_high_severity": 0,
-        "max_medium_severity": 5,
-        "tools": [
-          "bandit",
-          "safety"
-        ]
-      },
-      "performance_benchmarks": {
-        "enabled": true,
-        "max_response_time_ms": 200,
-        "min_throughput_rps": 100
-      },
-      "dependency_check": {
-        "enabled": true,
-        "check_vulnerabilities": true,
-        "check_licenses": true,
-        "allowed_licenses": [
-          "MIT",
-          "Apache-2.0",
-          "BSD-3-Clause"
-        ]
-      },
-      "documentation": {
-        "enabled": true,
-        "min_docstring_coverage": 80.0,
-        "check_readme": true
-      },
-      "build_validation": {
-        "enabled": true,
-        "check_imports": true,
-        "check_setup": true
-      }
-    }
-  },
+  "timestamp": 1756003524.4198954,
+  "overall_passed": false,
+  "overall_score": 0.7963434532061983,
+  "passed_gates": 6,
+  "total_gates": 9,
+  "pass_rate": 0.6666666666666666,
   "gate_results": [
     {
-      "gate_name": "code_quality",
-      "passed": false,
-      "score": 5.0,
-      "threshold": 8.0,
-      "details": {
-        "flake8": {
-          "error": "[Errno 2] No such file or directory: 'flake8'"
-        },
-        "black": {
-          "error": "[Errno 2] No such file or directory: 'black'"
-        }
-      },
-      "error_message": "Flake8 check failed: [Errno 2] No such file or directory: 'flake8'; Black check failed: [Errno 2] No such file or directory: 'black'",
-      "execution_time": 0.005533695220947266
-    },
-    {
-      "gate_name": "test_coverage",
-      "passed": false,
-      "score": 0.0,
-      "threshold": 85.0,
-      "details": {
-        "total_coverage": 0.0,
-        "estimated": true,
-        "test_output": ""
-      },
-      "error_message": null,
-      "execution_time": 0.034394264221191406
-    },
-    {
-      "gate_name": "security_scan",
-      "passed": false,
-      "score": 10.0,
-      "threshold": 8.0,
-      "details": {
-        "bandit": {
-          "error": "[Errno 2] No such file or directory: 'bandit'"
-        },
-        "safety": {
-          "error": "[Errno 2] No such file or directory: 'safety'"
-        }
-      },
-      "error_message": "Bandit scan failed: [Errno 2] No such file or directory: 'bandit'; Safety check failed: [Errno 2] No such file or directory: 'safety'",
-      "execution_time": 0.0018656253814697266
-    },
-    {
-      "gate_name": "performance_benchmarks",
+      "gate_name": "Code Structure",
       "passed": true,
-      "score": 10.0,
-      "threshold": 7.0,
+      "score": 1.0,
+      "threshold": 0.9,
+      "execution_time": 0.00017833709716796875,
       "details": {
-        "performance_metrics": {
-          "response_time_ms": 150,
-          "throughput_rps": 100,
-          "memory_usage_mb": 200
-        },
-        "response_time_ok": true,
-        "throughput_ok": true,
-        "benchmarks_run": true
+        "required_dirs": [
+          "graph_hypernetwork_forge",
+          "graph_hypernetwork_forge/models",
+          "graph_hypernetwork_forge/utils",
+          "graph_hypernetwork_forge/data",
+          "tests",
+          "scripts",
+          "docs"
+        ],
+        "existing_dirs": [
+          "graph_hypernetwork_forge",
+          "graph_hypernetwork_forge/models",
+          "graph_hypernetwork_forge/utils",
+          "graph_hypernetwork_forge/data",
+          "tests",
+          "scripts",
+          "docs"
+        ],
+        "missing_dirs": []
       },
-      "error_message": null,
-      "execution_time": 0.04175209999084473
+      "error_message": null
     },
     {
-      "gate_name": "dependency_check",
+      "gate_name": "Python Syntax",
       "passed": true,
-      "score": 10.0,
-      "threshold": 8.0,
+      "score": 1.0,
+      "threshold": 0.95,
+      "execution_time": 0.4183349609375,
       "details": {
-        "requirements.txt": {
-          "total_requirements": 11,
-          "unpinned_requirements": 0,
-          "unpinned_list": []
+        "total_files": 99,
+        "valid_files": 99,
+        "syntax_errors": []
+      },
+      "error_message": null
+    },
+    {
+      "gate_name": "Import Structure",
+      "passed": true,
+      "score": 1.0,
+      "threshold": 0.8,
+      "execution_time": 0.0012595653533935547,
+      "details": {
+        "core_modules": [
+          "graph_hypernetwork_forge/__init__.py",
+          "graph_hypernetwork_forge/models/__init__.py",
+          "graph_hypernetwork_forge/utils/__init__.py",
+          "graph_hypernetwork_forge/data/__init__.py"
+        ],
+        "working_imports": 4,
+        "import_errors": []
+      },
+      "error_message": null
+    },
+    {
+      "gate_name": "Documentation",
+      "passed": true,
+      "score": 1.0,
+      "threshold": 0.75,
+      "execution_time": 0.0003304481506347656,
+      "details": {
+        "required_docs": [
+          "README.md",
+          "CONTRIBUTING.md",
+          "LICENSE",
+          "CHANGELOG.md"
+        ],
+        "existing_docs": [
+          "README.md",
+          "CONTRIBUTING.md",
+          "LICENSE",
+          "CHANGELOG.md"
+        ],
+        "doc_quality": {
+          "README.md": {
+            "length": 8443,
+            "lines": 284,
+            "has_content": true
+          },
+          "CONTRIBUTING.md": {
+            "length": 1684,
+            "lines": 56,
+            "has_content": true
+          },
+          "LICENSE": {
+            "length": 1071,
+            "lines": 21,
+            "has_content": true
+          },
+          "CHANGELOG.md": {
+            "length": 986,
+            "lines": 42,
+            "has_content": true
+          }
         }
       },
-      "error_message": null,
-      "execution_time": 0.0004658699035644531
+      "error_message": null
     },
     {
-      "gate_name": "documentation",
+      "gate_name": "Configuration",
       "passed": true,
-      "score": 9.470709855272226,
-      "threshold": 7.0,
+      "score": 1.0,
+      "threshold": 0.8,
+      "execution_time": 0.00010323524475097656,
       "details": {
-        "readme_exists": true,
-        "docs_directory_exists": true,
-        "docstring_coverage": 82.35699517574086,
-        "total_functions": 1451,
-        "documented_functions": 1195
+        "required_configs": [
+          "pyproject.toml",
+          "requirements.txt"
+        ],
+        "existing_configs": [
+          "pyproject.toml",
+          "requirements.txt"
+        ],
+        "config_quality": {
+          "pyproject.toml": {
+            "length": 4431,
+            "has_content": true,
+            "has_build_system": true,
+            "has_project": true
+          },
+          "requirements.txt": {
+            "length": 186,
+            "has_content": true,
+            "num_dependencies": 11
+          }
+        }
       },
-      "error_message": null,
-      "execution_time": 0.048716068267822266
+      "error_message": null
     },
     {
-      "gate_name": "build_validation",
+      "gate_name": "Test Coverage",
       "passed": false,
-      "score": 8.0,
-      "threshold": 8.0,
+      "score": 0.17647058823529413,
+      "threshold": 0.3,
+      "execution_time": 0.006385087966918945,
       "details": {
-        "setup_files_exist": true,
-        "import_test": {
-          "successful": false,
-          "output": "",
-          "error": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/root/repo/graph_hypernetwork_forge/__init__.py\", line 10, in <module>\n    from .models import HyperGNN\n  File \"/root/repo/graph_hypernetwork_forge/models/__init__.py\", line 1, in <module>\n    from .hypergnn import HyperGNN\n  File \"/root/repo/graph_hypernetwork_forge/models/hypergnn.py\", line 6, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n"
-        },
-        "package_structure": {
-          "package_dir_exists": true,
-          "init_file_exists": true
-        }
+        "test_files": [
+          "tests/test_advanced_features.py",
+          "tests/test_data.py",
+          "tests/test_integration_complete.py",
+          "tests/test_models.py",
+          "tests/test_performance.py",
+          "tests/test_quality_gates.py",
+          "tests/test_security.py",
+          "tests/test_utils.py",
+          "tests/integration/test_end_to_end.py"
+        ],
+        "source_files_count": 51,
+        "test_files_count": 9,
+        "coverage_ratio": 0.17647058823529413
       },
-      "error_message": "Import test failed: Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/root/repo/graph_hypernetwork_forge/__init__.py\", line 10, in <module>\n    from .models import HyperGNN\n  File \"/root/repo/graph_hypernetwork_forge/models/__init__.py\", line 1, in <module>\n    from .hypergnn import HyperGNN\n  File \"/root/repo/graph_hypernetwork_forge/models/hypergnn.py\", line 6, in <module>\n    import torch\nModuleNotFoundError: No module named 'torch'\n",
-      "execution_time": 0.04039788246154785
+      "error_message": null
+    },
+    {
+      "gate_name": "Security Basics",
+      "passed": false,
+      "score": 0.5,
+      "threshold": 0.9,
+      "execution_time": 0.016832828521728516,
+      "details": {
+        "security_issues": [
+          {
+            "file": "generation_1_demo.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "production_test_suite.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "quality_gates_validator.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "simple_hypergnn_demo.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "autonomous_quality_gates.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "autonomous_quality_gates.py",
+            "pattern": "exec(",
+            "description": "Use of exec() function"
+          },
+          {
+            "file": "autonomous_quality_gates.py",
+            "pattern": "subprocess.call(",
+            "description": "Direct subprocess call without validation"
+          },
+          {
+            "file": "autonomous_quality_gates.py",
+            "pattern": "os.system(",
+            "description": "Use of os.system()"
+          },
+          {
+            "file": "autonomous_quality_gates.py",
+            "pattern": "shell=True",
+            "description": "Shell injection risk"
+          },
+          {
+            "file": "examples/cross_domain_transfer.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "examples/knowledge_graph_completion.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "examples/research_experiments.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "scripts/benchmark.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "scripts/demo.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "scripts/deployment_check.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "scripts/evaluate.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "tests/test_integration_complete.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "tests/test_quality_gates.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/models/hypergnn.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/models/self_evolving_hypernetworks.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/research/experimental_framework.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/distributed_training.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/federated_learning.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/health_checks.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/monitoring.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/optimization.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/performance_optimizer.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/scalable_processing.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/training.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          },
+          {
+            "file": "graph_hypernetwork_forge/utils/distributed_optimization.py",
+            "pattern": "eval(",
+            "description": "Use of eval() function"
+          }
+        ],
+        "files_scanned": 99
+      },
+      "error_message": null
+    },
+    {
+      "gate_name": "Performance Readiness",
+      "passed": false,
+      "score": 0.5714285714285714,
+      "threshold": 0.6,
+      "execution_time": 0.0046977996826171875,
+      "details": {
+        "optimization_files": [
+          "graph_hypernetwork_forge/utils/optimization.py",
+          "graph_hypernetwork_forge/utils/distributed_optimization.py",
+          "graph_hypernetwork_forge/utils/advanced_resilience.py"
+        ],
+        "existing_optimizations": 3,
+        "performance_indicators": [
+          "graph_hypernetwork_forge/utils/optimization.py",
+          "graph_hypernetwork_forge/utils/distributed_optimization.py",
+          "graph_hypernetwork_forge/utils/advanced_resilience.py"
+        ],
+        "pattern_matches": 16,
+        "total_patterns_searched": 112
+      },
+      "error_message": null
+    },
+    {
+      "gate_name": "Resilience Features",
+      "passed": true,
+      "score": 0.9191919191919191,
+      "threshold": 0.7,
+      "execution_time": 0.020638704299926758,
+      "details": {
+        "resilience_files": [
+          "graph_hypernetwork_forge/utils/advanced_resilience.py",
+          "graph_hypernetwork_forge/utils/exceptions.py",
+          "graph_hypernetwork_forge/utils/logging_utils.py",
+          "graph_hypernetwork_forge/utils/memory_utils.py"
+        ],
+        "existing_resilience": 4,
+        "resilience_features": [
+          "graph_hypernetwork_forge/utils/advanced_resilience.py",
+          "graph_hypernetwork_forge/utils/exceptions.py",
+          "graph_hypernetwork_forge/utils/logging_utils.py",
+          "graph_hypernetwork_forge/utils/memory_utils.py"
+        ],
+        "pattern_matches": 83,
+        "total_files": 99
+      },
+      "error_message": null
     }
   ]
 }

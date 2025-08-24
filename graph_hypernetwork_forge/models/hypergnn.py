@@ -1,5 +1,6 @@
 """Core HyperGNN model implementation with comprehensive error handling."""
 
+import time
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -89,6 +90,16 @@ except ImportError:
 # Import optimization utilities
 try:
     from ..utils.optimization import WeightCache, profile_function, AdaptiveDropout
+    from ..utils.advanced_resilience import (
+        ResilientModelWrapper, AdaptiveCircuitBreaker, ExponentialBackoffRetry,
+        ResourceGuard, AutoHealingManager, resilient_model_call
+    )
+    from ..utils.distributed_optimization import (
+        ScalableHyperGNN, PerformanceOptimizer, BatchProcessor,
+        DistributedConfig, DistributedManager
+    )
+    RESILIENCE_FEATURES = True
+    SCALING_FEATURES = True
 except ImportError:
     # Fallback for when utils are not available
     WeightCache = None
@@ -96,6 +107,17 @@ except ImportError:
         def decorator(func): return func
         return decorator
     AdaptiveDropout = nn.Dropout
+    ResilientModelWrapper = None
+    def resilient_model_call(*args, **kwargs):
+        def decorator(func): return func
+        return decorator
+    ScalableHyperGNN = None
+    PerformanceOptimizer = None
+    BatchProcessor = None
+    DistributedConfig = None
+    DistributedManager = None
+    RESILIENCE_FEATURES = False
+    SCALING_FEATURES = False
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -771,6 +793,22 @@ class HyperGNN(nn.Module, LoggerMixin):
         else:
             self.weight_cache = None
         
+        # Initialize resilience components if available
+        self.resilience_enabled = RESILIENCE_FEATURES
+        if RESILIENCE_FEATURES:
+            self.circuit_breaker = AdaptiveCircuitBreaker(failure_threshold=3)
+            self.retry_strategy = ExponentialBackoffRetry(max_retries=2)
+            self.resource_guard = ResourceGuard()
+            self.auto_healer = None  # Will be initialized after model creation
+            self.logger.info("Resilience features enabled: circuit breaker, retry, resource guard")
+        
+        # Initialize scaling components if available
+        self.scaling_enabled = SCALING_FEATURES
+        self.performance_optimizer = None
+        self.batch_processor = None
+        if SCALING_FEATURES:
+            self.logger.info("Scaling features available: performance optimization, batch processing, distributed training")
+        
         # Initialize components with error handling
         try:
             self.logger.info("Initializing TextEncoder...")
@@ -796,6 +834,11 @@ class HyperGNN(nn.Module, LoggerMixin):
             )
             
             self.logger.info("HyperGNN initialization completed successfully")
+            
+            # Initialize auto-healer after all components are ready
+            if self.resilience_enabled:
+                self.auto_healer = AutoHealingManager(self)
+                self.logger.info("Auto-healing manager initialized")
             
         except Exception as e:
             error_msg = f"Failed to initialize HyperGNN components: {e}"
@@ -1035,6 +1078,375 @@ class HyperGNN(nn.Module, LoggerMixin):
             "num_layers": self.num_layers,
             "dropout": self.dropout,
         }
+    
+    def forward_resilient(
+        self,
+        edge_index: torch.Tensor,
+        node_features: torch.Tensor,
+        node_texts: List[str],
+    ) -> torch.Tensor:
+        """Resilient forward pass with comprehensive error recovery.
+        
+        This method provides advanced error handling, automatic recovery,
+        and resource management for production deployments.
+        
+        Args:
+            edge_index: Edge connectivity [2, num_edges]
+            node_features: Node features [num_nodes, feature_dim]
+            node_texts: List of node text descriptions
+            
+        Returns:
+            Node embeddings [num_nodes, output_dim]
+            
+        Raises:
+            ValidationError: If inputs are invalid
+            InferenceError: If inference fails after all recovery attempts
+        """
+        if not self.resilience_enabled:
+            return self.forward(edge_index, node_features, node_texts)
+        
+        def protected_forward():
+            return self.forward(edge_index, node_features, node_texts)
+        
+        try:
+            # Execute with resource protection
+            with self.resource_guard.resource_protection():
+                # Execute with circuit breaker and retry protection
+                return self.circuit_breaker.call(
+                    self.retry_strategy.retry, 
+                    protected_forward
+                )
+        except Exception as e:
+            # Attempt auto-healing if available
+            if self.auto_healer:
+                self.logger.info("Attempting auto-healing due to forward pass failure")
+                healing_result = self.auto_healer.diagnose_and_heal()
+                
+                if healing_result["healing_successful"]:
+                    self.logger.info("Auto-healing successful, retrying forward pass")
+                    return self.circuit_breaker.call(protected_forward)
+            
+            raise InferenceError(
+                node_features.shape, 
+                "HyperGNN.forward_resilient", 
+                f"Resilient forward pass failed after all recovery attempts: {e}"
+            )
+    
+    def get_health_status(self) -> Dict[str, Any]:
+        """Get comprehensive health status of the model.
+        
+        Returns:
+            Dictionary containing health metrics and status information
+        """
+        status = {
+            "timestamp": time.time(),
+            "model_info": {
+                "text_encoder": self.text_encoder_name,
+                "gnn_backbone": self.gnn_backbone,
+                "hidden_dim": self.hidden_dim,
+                "num_layers": self.num_layers,
+            },
+            "resilience_enabled": self.resilience_enabled,
+            "overall_health": "healthy",
+        }
+        
+        if not self.resilience_enabled:
+            return status
+        
+        # Circuit breaker health
+        if self.circuit_breaker:
+            circuit_health = self.circuit_breaker.get_health_metrics()
+            status["circuit_breaker"] = circuit_health
+            if circuit_health["state"] != "healthy":
+                status["overall_health"] = "degraded"
+        
+        # Resource health
+        if self.resource_guard:
+            healthy, warnings = self.resource_guard.is_resources_healthy()
+            status["resources"] = {
+                "healthy": healthy,
+                "warnings": warnings,
+                "current": self.resource_guard.check_resources()
+            }
+            if not healthy:
+                status["overall_health"] = "degraded"
+        
+        # Auto-healing status
+        if self.auto_healer:
+            recent_healings = self.auto_healer.healing_history[-5:]  # Last 5 events
+            status["auto_healing"] = {
+                "recent_healings": recent_healings,
+                "total_healings": len(self.auto_healer.healing_history),
+                "last_healing": recent_healings[-1] if recent_healings else None,
+            }
+            
+            # Mark as degraded if recent healings occurred
+            if recent_healings:
+                recent_time = time.time() - 300  # Last 5 minutes
+                recent_critical_healings = [
+                    h for h in recent_healings 
+                    if h["timestamp"] > recent_time and h["healing_successful"]
+                ]
+                if recent_critical_healings:
+                    status["overall_health"] = "degraded"
+        
+        # Model parameter health check
+        param_health = self._check_parameter_health()
+        status["parameters"] = param_health
+        if param_health["issues_found"]:
+            status["overall_health"] = "critical" if param_health["critical_issues"] else "degraded"
+        
+        return status
+    
+    def _check_parameter_health(self) -> Dict[str, Any]:
+        """Check health of model parameters."""
+        health = {
+            "total_params": sum(p.numel() for p in self.parameters()),
+            "trainable_params": sum(p.numel() for p in self.parameters() if p.requires_grad),
+            "nan_params": 0,
+            "inf_params": 0,
+            "zero_grad_params": 0,
+            "issues_found": [],
+            "critical_issues": [],
+        }
+        
+        for name, param in self.named_parameters():
+            # Check for NaN values
+            if torch.isnan(param).any():
+                health["nan_params"] += torch.isnan(param).sum().item()
+                health["issues_found"].append(f"NaN values in {name}")
+                health["critical_issues"].append(name)
+            
+            # Check for infinite values
+            if torch.isinf(param).any():
+                health["inf_params"] += torch.isinf(param).sum().item()
+                health["issues_found"].append(f"Infinite values in {name}")
+                health["critical_issues"].append(name)
+            
+            # Check gradients if available
+            if param.grad is not None:
+                if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                    health["issues_found"].append(f"Invalid gradients in {name}")
+                elif param.grad.abs().max() == 0:
+                    health["zero_grad_params"] += 1
+        
+        return health
+    
+    def create_resilient_wrapper(self) -> 'ResilientModelWrapper':
+        """Create a resilient wrapper around this model.
+        
+        Returns:
+            ResilientModelWrapper instance providing additional protection
+        """
+        if not self.resilience_enabled or ResilientModelWrapper is None:
+            raise RuntimeError(
+                "Resilience features not available. Install required dependencies."
+            )
+        
+        return ResilientModelWrapper(
+            model=self,
+            enable_circuit_breaker=True,
+            enable_auto_healing=True,
+            enable_resource_guard=True,
+        )
+    
+    def optimize_for_performance(self, 
+                                mixed_precision: bool = True,
+                                gradient_checkpointing: bool = True,
+                                model_compilation: bool = True) -> 'HyperGNN':
+        """Optimize model for high performance inference and training.
+        
+        Args:
+            mixed_precision: Enable mixed precision training/inference
+            gradient_checkpointing: Enable gradient checkpointing for memory efficiency
+            model_compilation: Enable PyTorch 2.0 compilation
+            
+        Returns:
+            Self for method chaining
+            
+        Raises:
+            RuntimeError: If scaling features are not available
+        """
+        if not self.scaling_enabled or PerformanceOptimizer is None:
+            raise RuntimeError(
+                "Scaling features not available. Install required dependencies."
+            )
+        
+        if self.performance_optimizer is None:
+            self.performance_optimizer = PerformanceOptimizer(self)
+        
+        self.performance_optimizer\
+            .apply_mixed_precision(mixed_precision)\
+            .apply_gradient_checkpointing(gradient_checkpointing)
+        
+        if model_compilation:
+            self.performance_optimizer.apply_model_compilation()
+        
+        self.logger.info("Performance optimizations applied")
+        return self
+    
+    def setup_batch_processing(self, 
+                             batch_size: int = 32,
+                             max_workers: int = None,
+                             device_ids: Optional[List[int]] = None) -> 'HyperGNN':
+        """Setup high-throughput batch processing for inference.
+        
+        Args:
+            batch_size: Batch size for processing
+            max_workers: Maximum number of worker threads
+            device_ids: GPU device IDs to use
+            
+        Returns:
+            Self for method chaining
+            
+        Raises:
+            RuntimeError: If scaling features are not available
+        """
+        if not self.scaling_enabled or BatchProcessor is None:
+            raise RuntimeError(
+                "Scaling features not available. Install required dependencies."
+            )
+        
+        self.batch_processor = BatchProcessor(
+            model=self,
+            batch_size=batch_size,
+            max_workers=max_workers,
+            device_ids=device_ids
+        )
+        self.batch_processor.start()
+        
+        self.logger.info(f"Batch processing setup: batch_size={batch_size}, "
+                        f"max_workers={self.batch_processor.max_workers}")
+        return self
+    
+    def create_scalable_wrapper(self, 
+                               distributed_config: Optional[DistributedConfig] = None,
+                               enable_optimization: bool = True) -> 'ScalableHyperGNN':
+        """Create a scalable wrapper with distributed and optimization features.
+        
+        Args:
+            distributed_config: Configuration for distributed training
+            enable_optimization: Whether to enable performance optimizations
+            
+        Returns:
+            ScalableHyperGNN wrapper instance
+            
+        Raises:
+            RuntimeError: If scaling features are not available
+        """
+        if not self.scaling_enabled or ScalableHyperGNN is None:
+            raise RuntimeError(
+                "Scaling features not available. Install required dependencies."
+            )
+        
+        return ScalableHyperGNN(
+            base_model=self,
+            distributed_config=distributed_config,
+            enable_optimization=enable_optimization
+        )
+    
+    def profile_performance(self, 
+                          sample_input: Tuple[torch.Tensor, torch.Tensor, List[str]],
+                          num_runs: int = 100) -> Dict[str, float]:
+        """Profile model performance with sample input.
+        
+        Args:
+            sample_input: Sample input tuple (edge_index, node_features, node_texts)
+            num_runs: Number of profiling runs
+            
+        Returns:
+            Performance metrics dictionary
+        """
+        if self.performance_optimizer is None and self.scaling_enabled:
+            self.performance_optimizer = PerformanceOptimizer(self)
+        
+        if self.performance_optimizer:
+            return self.performance_optimizer.profile_performance(sample_input, num_runs)
+        else:
+            # Fallback basic profiling
+            self.eval()
+            edge_index, node_features, node_texts = sample_input
+            
+            # Warmup
+            with torch.no_grad():
+                for _ in range(5):
+                    self.forward(edge_index, node_features, node_texts)
+            
+            # Time measurement
+            start_time = time.perf_counter()
+            with torch.no_grad():
+                for _ in range(num_runs):
+                    self.forward(edge_index, node_features, node_texts)
+            end_time = time.perf_counter()
+            
+            avg_time = (end_time - start_time) / num_runs
+            return {
+                "avg_inference_time_ms": avg_time * 1000,
+                "throughput_qps": 1.0 / avg_time,
+                "memory_usage_mb": 0.0,  # Not available in fallback
+                "optimizations_applied": 0,
+            }
+    
+    def process_batch_async(self, 
+                           batch_data: List[Tuple[torch.Tensor, torch.Tensor, List[str]]],
+                           timeout: float = 10.0) -> List[torch.Tensor]:
+        """Process batch of inputs asynchronously using batch processor.
+        
+        Args:
+            batch_data: List of input tuples
+            timeout: Timeout for batch processing
+            
+        Returns:
+            List of output tensors
+            
+        Raises:
+            RuntimeError: If batch processor is not initialized
+        """
+        if self.batch_processor is None:
+            raise RuntimeError(
+                "Batch processor not initialized. Call setup_batch_processing() first."
+            )
+        
+        # Submit all requests
+        request_ids = []
+        for data in batch_data:
+            req_id = self.batch_processor.process_async(data)
+            request_ids.append(req_id)
+        
+        # Collect results
+        results = []
+        for req_id in request_ids:
+            result = self.batch_processor.get_result(req_id, timeout)
+            results.append(result)
+        
+        return results
+    
+    def get_scaling_status(self) -> Dict[str, Any]:
+        """Get comprehensive scaling status and metrics.
+        
+        Returns:
+            Dictionary containing scaling status and metrics
+        """
+        status = {
+            "scaling_enabled": self.scaling_enabled,
+            "optimization_applied": self.performance_optimizer is not None,
+            "batch_processing_active": self.batch_processor is not None,
+        }
+        
+        if self.performance_optimizer:
+            status["optimizations"] = self.performance_optimizer.get_optimization_summary()
+        
+        if self.batch_processor:
+            status["batch_processing"] = self.batch_processor.get_statistics()
+        
+        return status
+    
+    def cleanup_scaling_resources(self):
+        """Cleanup scaling-related resources."""
+        if self.batch_processor:
+            self.batch_processor.stop()
+            self.batch_processor = None
+            self.logger.info("Batch processor stopped and cleaned up")
     
     @classmethod
     def from_config(cls, config: Dict) -> "HyperGNN":
