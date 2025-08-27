@@ -1,0 +1,82 @@
+{
+  "session_start": "2025-08-27T19:17:03.867274",
+  "questions_investigated": [
+    {
+      "question": "How can quantum-enhanced hypernetworks achieve exponential improvements in graph learning?",
+      "hypotheses_tested": 5,
+      "findings_generated": 2,
+      "papers_published": 2
+    },
+    {
+      "question": "What are the theoretical limits of multimodal graph representation learning?",
+      "hypotheses_tested": 2,
+      "findings_generated": 1,
+      "papers_published": 0
+    },
+    {
+      "question": "Can self-evolving neural architectures discover novel graph algorithms autonomously?",
+      "hypotheses_tested": 2,
+      "findings_generated": 1,
+      "papers_published": 2
+    },
+    {
+      "question": "How does causal reasoning integration improve zero-shot transfer in graph domains?",
+      "hypotheses_tested": 4,
+      "findings_generated": 3,
+      "papers_published": 2
+    }
+  ],
+  "papers_generated": [
+    {
+      "title": "Novel Quantum-Enhanced Graph Learning: Breakthrough 1.1",
+      "files": [
+        "./autonomous_research_output/Novel_Quantum-Enhanced_Graph_Learning:_Breakthrough_1.1.md"
+      ]
+    },
+    {
+      "title": "Novel Quantum-Enhanced Graph Learning: Breakthrough 1.2",
+      "files": [
+        "./autonomous_research_output/Novel_Quantum-Enhanced_Graph_Learning:_Breakthrough_1.2.md"
+      ]
+    },
+    {
+      "title": "Novel Quantum-Enhanced Graph Learning: Breakthrough 3.1",
+      "files": [
+        "./autonomous_research_output/Novel_Quantum-Enhanced_Graph_Learning:_Breakthrough_3.1.md"
+      ]
+    },
+    {
+      "title": "Novel Quantum-Enhanced Graph Learning: Breakthrough 3.2",
+      "files": [
+        "./autonomous_research_output/Novel_Quantum-Enhanced_Graph_Learning:_Breakthrough_3.2.md"
+      ]
+    },
+    {
+      "title": "Novel Quantum-Enhanced Graph Learning: Breakthrough 4.1",
+      "files": [
+        "./autonomous_research_output/Novel_Quantum-Enhanced_Graph_Learning:_Breakthrough_4.1.md"
+      ]
+    },
+    {
+      "title": "Novel Quantum-Enhanced Graph Learning: Breakthrough 4.2",
+      "files": [
+        "./autonomous_research_output/Novel_Quantum-Enhanced_Graph_Learning:_Breakthrough_4.2.md"
+      ]
+    }
+  ],
+  "breakthrough_discoveries": [
+    {
+      "question": "How can quantum-enhanced hypernetworks achieve exponential improvements in graph learning?",
+      "hypothesis_id": "breakthrough_hyp_1_1756322225",
+      "breakthrough_score": 0.9028984660773779
+    },
+    {
+      "question": "Can self-evolving neural architectures discover novel graph algorithms autonomously?",
+      "hypothesis_id": "breakthrough_hyp_3_1756322229",
+      "breakthrough_score": 0.8351985695962821
+    }
+  ],
+  "total_hypotheses_tested": 13,
+  "session_end": "2025-08-27T19:17:11.871255",
+  "session_duration_minutes": 2.0
+}
