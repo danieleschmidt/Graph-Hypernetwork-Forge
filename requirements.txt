@@ -1,11 +1,6 @@
-torch>=2.3.0
-torch-geometric>=2.5.0
-transformers>=4.40.0
-sentence-transformers>=3.0.0
+# Core dependencies (all you need to run demo.py and the library)
+torch>=2.0.0
 numpy>=1.24.0
-scipy>=1.10.0
-networkx>=3.0
-pandas>=2.0.0
-tqdm>=4.65.0
-wandb>=0.16.0
-hydra-core>=1.3.0
+
+# Development / testing
+pytest>=7.0.0

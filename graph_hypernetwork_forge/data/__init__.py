@@ -1,3 +1,3 @@
-from .knowledge_graph import TextualKnowledgeGraph
+from .knowledge_graph import ToyKnowledgeGraph
 
-__all__ = ["TextualKnowledgeGraph"]
+__all__ = ["ToyKnowledgeGraph"]
